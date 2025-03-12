@@ -391,13 +391,11 @@ func SetApolloPoolXLayer(ctx *cli.Context, fullCfg *ethconfig.Config) {
 	setTxPool(ctx, fullCfg)
 }
 
-// CheckAddressExists is a public wrapper function to internally call checkAddressExists
 func CheckAddressExists(addressMap map[libcommon.Address]struct{}, target libcommon.Address) bool {
 	_, exists := addressMap[target]
 	return exists
 }
 
-// SetPreRunList is a public wrapper function to internally call setPreRunList
 func SetPreRunList(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.IsSet(PreRunAddressList.Name) {
 		addrHexes := libcommon.CliString2Array(ctx.String(PreRunAddressList.Name))
