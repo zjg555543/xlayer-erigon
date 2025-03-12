@@ -434,6 +434,7 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		// For X Layer
 		L2GasPricer:   gasprice.NewL2GasPriceSuggester(context.Background(), ethCfg.GPO),
 		EnableInnerTx: ethCfg.XLayer.EnableInnerTx,
+		PreRunList:    ethCfg.XLayer.PreRunList,
 	}
 
 	// For X Layer

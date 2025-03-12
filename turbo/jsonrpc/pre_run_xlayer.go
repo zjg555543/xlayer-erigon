@@ -133,7 +133,7 @@ func (api *APIImpl) preRunWorker(txn types.Transaction, chainId *big.Int) (hexut
 	}
 
 	if result.Failed() {
-		log.Error("Execution failed", "gas", fixedGas, "from", fromAddress, "to", txn.GetTo(), "revert", result.Revert())
+		log.Error("Prerun execution failed", "gas", fixedGas, "from", fromAddress, "to", txn.GetTo(), "revert", result.Revert())
 		if len(result.Revert()) > 0 {
 			return 0, ethapi2.NewRevertError(result)
 		}
