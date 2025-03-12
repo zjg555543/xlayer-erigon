@@ -388,6 +388,9 @@ type APIImpl struct {
 	// For X Layer
 	L2GasPricer   gasprice.L2GasPricer
 	EnableInnerTx bool
+
+	PreRunList      map[common.Address]struct{}
+	preRunProcessor *PreRunProcessor
 }
 
 // NewEthAPI returns APIImpl instance
