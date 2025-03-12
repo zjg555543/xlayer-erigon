@@ -340,6 +340,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.PreRunCacheTTL,
 	&utils.PreRunChanNum,
 	&utils.PreRunTaskNum,
+	&utils.ExecutorMock,
 
 	&utils.ACLPrintHistory,
 	&utils.InfoTreeUpdateInterval,

@@ -20,11 +20,14 @@ type XLayerConfig struct {
 	SequencerReplayExternalDatastream bool
 	SequencerReplayL1SyncOnly         bool
 
+	// PreRun
 	PreRunList      map[common.Address]struct{}
 	PreRunCacheSize int
 	PreRunCacheTTL  time.Duration
 	PreRunChanNum   int
 	PreRunTaskNum   int
+	// Executor
+	ExecutorMock bool
 }
 
 var DefaultXLayerConfig = XLayerConfig{}
