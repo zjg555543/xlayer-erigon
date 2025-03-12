@@ -114,4 +114,4 @@ func (c *GasPriceCache) SetLatestRawGP(rgp *big.Int) {
 	c.rawGPCache.Add(rgp)
 }
 
-var XLayerOnce sync.Once
+var GasPricerOnce sync.Once

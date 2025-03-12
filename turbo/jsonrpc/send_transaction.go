@@ -10,7 +10,6 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	txPoolProto "github.com/ledgerwatch/erigon-lib/gointerfaces/txpool"
 
-	utils2 "github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rpc"
@@ -85,7 +84,13 @@ func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility
 		}
 	}
 
-	if api.RejectLowGasPriceTransactions && txn.GetPrice().Uint64() < api.DefaultGasPrice {
+	// check if the price is too low if we are set to reject low gas price transactions
+	if api.RejectLowGasPriceTransactions &&
+		ShouldRejectLowGasPrice(
+			txn.GetPrice().ToBig(),
+			api.gasTracker.GetLowestPrice(),
+			api.RejectLowGasPriceTolerance,
+		) {
 		return common.Hash{}, errors.New("transaction price is too low")
 	}
 
@@ -104,9 +109,6 @@ func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility
 		if chainId.Cmp(txnChainId.ToBig()) != 0 {
 			return common.Hash{}, fmt.Errorf("invalid chain id, expected: %d got: %d", chainId, *txnChainId)
 		}
-	}
-	if len(api.PreRunList) > 0 && utils2.CheckAddressExists(api.PreRunList, txn.GetTo()) {
-		api.preRun(txn, chainId)
 	}
 
 	hash := txn.Hash()
@@ -151,4 +153,14 @@ func checkTxFee(gasPrice *big.Int, gas uint64, gasCap float64) error {
 		return fmt.Errorf("tx fee (%.2f ether) exceeds the configured cap (%.2f ether)", feeFloat, gasCap)
 	}
 	return nil
+}
+
+func ShouldRejectLowGasPrice(txPrice *big.Int, lowestAllowed *big.Int, rejectLowGasPriceTolerance float64) bool {
+	finalCheck := new(big.Int).Set(lowestAllowed)
+	if rejectLowGasPriceTolerance > 0 {
+		modifier := new(big.Int).SetUint64(uint64(100 - rejectLowGasPriceTolerance*100))
+		finalCheck.Mul(finalCheck, modifier)
+		finalCheck.Div(finalCheck, big.NewInt(100))
+	}
+	return txPrice.Cmp(finalCheck) < 0
 }

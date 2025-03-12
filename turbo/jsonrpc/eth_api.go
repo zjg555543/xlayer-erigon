@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
-	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 
 	lru "github.com/hashicorp/golang-lru/v2"
@@ -378,20 +377,21 @@ type APIImpl struct {
 	SubscribeLogsChannelSize      int
 	logger                        log.Logger
 	VirtualCountersSmtReduction   float64
+	gasTracker                    RpcL1GasPriceTracker
 	RejectLowGasPriceTransactions bool
+	RejectLowGasPriceTolerance    float64
 	BadTxAllowance                uint64
 	SenderLocks                   *SenderLock
 	LogsMaxRange                  uint64
+	DisableVirtualCounters        bool
 
 	// For X Layer
-	L2GasPricer     gasprice.L2GasPricer
-	EnableInnerTx   bool
-	PreRunList      map[common.Address]struct{}
-	preRunProcessor *PreRunProcessor
+	L2GasPricer   gasprice.L2GasPricer
+	EnableInnerTx bool
 }
 
 // NewEthAPI returns APIImpl instance
-func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient, gascap uint64, feecap float64, returnDataLimit int, ethCfg *ethconfig.Config, allowUnprotectedTxs bool, maxGetProofRewindBlockCount int, subscribeLogsChannelSize int, logger log.Logger, LogsMaxRange uint64) *APIImpl {
+func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient, gascap uint64, feecap float64, returnDataLimit int, ethCfg *ethconfig.Config, allowUnprotectedTxs bool, maxGetProofRewindBlockCount int, subscribeLogsChannelSize int, logger log.Logger, gasTracker RpcL1GasPriceTracker, LogsMaxRange uint64) *APIImpl {
 	if gascap == 0 {
 		gascap = uint64(math.MaxUint64 / 2)
 	}
@@ -424,25 +424,21 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		BadTxAllowance:                ethCfg.BadTxAllowance,
 		SenderLocks:                   NewSenderLock(),
 		LogsMaxRange:                  LogsMaxRange,
+		gasTracker:                    gasTracker,
+		RejectLowGasPriceTolerance:    ethCfg.RejectLowGasPriceTolerance,
+		DisableVirtualCounters:        ethCfg.DisableVirtualCounters,
+
 		// For X Layer
 		L2GasPricer:   gasprice.NewL2GasPriceSuggester(context.Background(), ethCfg.GPO),
 		EnableInnerTx: ethCfg.XLayer.EnableInnerTx,
-		PreRunList:    ethCfg.XLayer.PreRunList,
 	}
 
 	// For X Layer
-	XLayerOnce.Do(func() {
+	// Only Sequencer requires to calculate dynamic gas price periodically
+	// eth_gasPrice requests for the RPC nodes are all redirected to the Sequencer node (via zkevm.l2-sequencer-rpc-url)
+	GasPricerOnce.Do(func() {
 		if sequencer.IsSequencer() {
-			log.Info("X Layer once for sequencer")
-			// Only Sequencer requires to calculate dynamic gas price periodically
-			// eth_gasPrice requests for the RPC nodes are all redirected to the Sequencer node (via zkevm.l2-sequencer-rpc-url)
 			apii.runL2GasPricerForXLayer()
-			// Initialize the precompiled cache and prerun workers
-			vm.InitPrecompiledCache(ethCfg.XLayer.PreRunCacheSize, ethCfg.XLayer.PreRunCacheTTL)
-			apii.initPreRunWorkers(ethCfg.XLayer.PreRunChanNum, ethCfg.XLayer.PreRunTaskNum)
-			log.Info(fmt.Sprintf("XLayer pre run list:%v, cache size:%v, ttl:%v, chan:%v, task:%v",
-				apii.PreRunList, ethCfg.XLayer.PreRunCacheSize, ethCfg.XLayer.PreRunCacheTTL,
-				ethCfg.XLayer.PreRunChanNum, ethCfg.XLayer.PreRunTaskNum))
 		}
 	})
 

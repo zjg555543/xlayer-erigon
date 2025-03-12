@@ -13,6 +13,7 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/etl"
 	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/erigon/zk/metrics"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -257,6 +258,8 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 	count := 0
 	total := float64(m.count)
 	for table, bucket := range m.puts {
+		startTime := time.Now()
+		metrics.GetLogStatistics().CumulativeValue(metrics.LogTag(table), int64(len(bucket)))
 		collector := etl.NewCollector("", m.tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize/2), m.logger)
 		defer collector.Close()
 		collector.SortAndFlushInBackground(true)
@@ -277,6 +280,7 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 			return err
 		}
 		collector.Close()
+		metrics.GetLogStatistics().CumulativeTiming(metrics.LogTag(table)+"Timing", time.Since(startTime))
 	}
 
 	tx.CollectMetrics()

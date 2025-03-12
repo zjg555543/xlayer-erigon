@@ -22,11 +22,13 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 			ApplicationName:    ctx.String(utils.NacosApplicationNameFlag.Name),
 			ExternalListenAddr: ctx.String(utils.NacosExternalListenAddrFlag.Name),
 		},
-		EnableInnerTx:               ctx.Bool(utils.AllowInternalTransactions.Name),
-		SequencerBatchSleepDuration: ctx.Duration(utils.SequencerBatchSleepDuration.Name),
+		EnableInnerTx:                     ctx.Bool(utils.AllowInternalTransactions.Name),
+		SequencerBatchSleepDuration:       ctx.Duration(utils.SequencerBatchSleepDuration.Name),
+		SequencerReplay:                   ctx.Bool(utils.SequencerReplay.Name),
+		SequencerReplayHaltOnBatchNumber:  ctx.Uint64(utils.SequencerReplayHaltOnBatchNumber.Name),
+		SequencerReplayExternalDatastream: ctx.Bool(utils.SequencerReplayExternalDatastream.Name),
+		SequencerReplayL1SyncOnly:         ctx.Bool(utils.SequencerReplayL1SyncOnly.Name),
 	}
-
-	utils.SetPreRunList(ctx, cfg)
 
 	if ctx.IsSet(utils.ApolloNamespaceName.Name) {
 		ns := strings.Split(ctx.String(utils.ApolloNamespaceName.Name), ",")
