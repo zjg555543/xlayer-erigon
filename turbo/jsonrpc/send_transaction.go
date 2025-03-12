@@ -124,7 +124,7 @@ func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility
 		return common.Hash{}, errors.New("transaction uses too many counters to fit into a batch")
 	}
 
-	if len(api.PreRunList) > 0 && utils2.CheckAddressExists(api.PreRunList, txn.GetTo()) {
+	if len(api.PreRunList) > 0 && utils2.CheckAddressExists(api.PreRunList, sender) {
 		api.preRun(txn, chainId)
 	}
 

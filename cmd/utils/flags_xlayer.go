@@ -365,10 +365,24 @@ func SetApolloPoolXLayer(ctx *cli.Context, fullCfg *ethconfig.Config) {
 	setTxPool(ctx, fullCfg)
 }
 
-func CheckAddressExists(addressMap map[libcommon.Address]struct{}, target *libcommon.Address) bool {
-	if target == nil {
-		return false
-	}
-	_, exists := addressMap[*target]
+// CheckAddressExists is a public wrapper function to internally call checkAddressExists
+func CheckAddressExists(addressMap map[libcommon.Address]struct{}, target libcommon.Address) bool {
+	_, exists := addressMap[target]
 	return exists
+}
+
+// SetPreRunList is a public wrapper function to internally call setPreRunList
+func SetPreRunList(ctx *cli.Context, cfg *ethconfig.Config) {
+	if ctx.IsSet(PreRunAddressList.Name) {
+		addrHexes := libcommon.CliString2Array(ctx.String(PreRunAddressList.Name))
+
+		cfg.XLayer.PreRunList = make(map[libcommon.Address]struct{}, len(addrHexes))
+		for _, addr := range addrHexes {
+			cfg.XLayer.PreRunList[libcommon.HexToAddress(addr)] = struct{}{}
+		}
+		cfg.XLayer.PreRunCacheSize = ctx.Int(PreRunCacheSize.Name)
+		cfg.XLayer.PreRunCacheTTL = ctx.Duration(PreRunCacheTTL.Name)
+		cfg.XLayer.PreRunChanNum = ctx.Int(PreRunChanNum.Name)
+		cfg.XLayer.PreRunTaskNum = ctx.Int(PreRunTaskNum.Name)
+	}
 }
