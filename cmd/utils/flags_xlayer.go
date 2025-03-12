@@ -391,11 +391,13 @@ func SetApolloPoolXLayer(ctx *cli.Context, fullCfg *ethconfig.Config) {
 	setTxPool(ctx, fullCfg)
 }
 
+// CheckAddressExists check if the address exists in the address map
 func CheckAddressExists(addressMap map[libcommon.Address]struct{}, target libcommon.Address) bool {
 	_, exists := addressMap[target]
 	return exists
 }
 
+// SetPreRunList is set pre run list and cache size, ttl, chan num, task num
 func SetPreRunList(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.IsSet(PreRunAddressList.Name) {
 		addrHexes := libcommon.CliString2Array(ctx.String(PreRunAddressList.Name))
