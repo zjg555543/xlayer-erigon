@@ -31,6 +31,8 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		ExecutorMock:                      ctx.Bool(utils.ExecutorMock.Name),
 	}
 
+	utils.SetPreRunList(ctx, cfg)
+
 	if ctx.IsSet(utils.ApolloNamespaceName.Name) {
 		ns := strings.Split(ctx.String(utils.ApolloNamespaceName.Name), ",")
 		for idx, item := range ns {
