@@ -101,6 +101,11 @@ func (api *APIImpl) preRunWorker(txn types.Transaction, chainId *big.Int) (hexut
 		return 0, err
 	}
 	defer dbtx.Rollback()
+	dbtxsmt, err := api.dbsmt.BeginRo(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer dbtxsmt.Rollback()
 
 	block, stateReader, chainConfig, err := api.prepareBlockAndState(ctx, dbtx)
 	if err != nil {
@@ -116,6 +121,7 @@ func (api *APIImpl) preRunWorker(txn types.Transaction, chainId *big.Int) (hexut
 		api.GasCap,
 		latestNumOrHash,
 		dbtx,
+		dbtxsmt,
 		api._blockReader,
 		chainConfig,
 		api.evmCallTimeout,
