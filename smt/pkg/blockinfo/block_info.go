@@ -18,6 +18,13 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common"
 )
 
+var initBlockInfoTreeConcurrent bool
+
+func InitUseBlockInfoTreeTrue() {
+	log.Info("using concurrent block info tree calculation")
+	initBlockInfoTreeConcurrent = true
+}
+
 type ExecutedTxInfo struct {
 	Tx                ethTypes.Transaction
 	EffectiveGasPrice uint8
@@ -36,6 +43,10 @@ func BuildBlockInfoTree(
 	previousStateRoot common.Hash,
 	transactionInfos *[]ExecutedTxInfo,
 ) (*common.Hash, error) {
+	if !initBlockInfoTreeConcurrent {
+		return BuildBlockInfoTreeSerial(coinbase, blockNumber, blockTime, blockGasLimit, blockGasUsed, ger, l1BlockHash, previousStateRoot, transactionInfos)
+	}
+
 	infoTree := NewBlockInfoTree()
 	keys, vals, err := infoTree.GenerateBlockHeader(&previousStateRoot, coinbase, blockNumber, blockGasLimit, blockTime, &ger, &l1BlockHash)
 	if err != nil {
