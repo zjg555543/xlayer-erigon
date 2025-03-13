@@ -443,11 +443,13 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 	GasPricerOnce.Do(func() {
 		if sequencer.IsSequencer() {
 			apii.runL2GasPricerForXLayer()
-			vm.InitPrecompiledCache(ethCfg.XLayer.PreRunCacheSize, ethCfg.XLayer.PreRunCacheTTL)
-			apii.initPreRunWorkers(ethCfg.XLayer.PreRunChanNum, ethCfg.XLayer.PreRunTaskNum)
-			log.Info(fmt.Sprintf("prerun list:%v, cache size:%v, ttl:%v, chan:%v, task:%v",
-				apii.PreRunList, ethCfg.XLayer.PreRunCacheSize, ethCfg.XLayer.PreRunCacheTTL,
-				ethCfg.XLayer.PreRunChanNum, ethCfg.XLayer.PreRunTaskNum))
+			if len(ethCfg.XLayer.PreRunList) > 0 {
+				vm.InitPrecompiledCache(ethCfg.XLayer.PreRunCacheSize, ethCfg.XLayer.PreRunCacheTTL)
+				apii.initPreRunWorkers(ethCfg.XLayer.PreRunChanNum, ethCfg.XLayer.PreRunTaskNum)
+				log.Info(fmt.Sprintf("prerun list:%v, cache size:%v, ttl:%v, chan:%v, task:%v",
+					apii.PreRunList, ethCfg.XLayer.PreRunCacheSize, ethCfg.XLayer.PreRunCacheTTL,
+					ethCfg.XLayer.PreRunChanNum, ethCfg.XLayer.PreRunTaskNum))
+			}
 		}
 	})
 
