@@ -27,7 +27,8 @@ type XLayerConfig struct {
 	PreRunChanNum   int
 	PreRunTaskNum   int
 	// Executor
-	ExecutorMock bool
+	ExecutorMock        bool
+	BlockInfoConcurrent bool
 }
 
 var DefaultXLayerConfig = XLayerConfig{}
