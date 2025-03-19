@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
-	"github.com/ledgerwatch/log/v3"
 )
 
 var (
@@ -85,15 +84,12 @@ func (m *MemDb) SetMaxBlock(value uint64) error {
 	defer m.lock.Unlock()
 
 	m.MaxBlock = value
-	// log.Info("zjg, SetMaxBlock", "block", value)
 	return nil
 }
 
 func (m *MemDb) GetMaxBlock() (uint64, error) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
-
-	log.Info("zjg, GetMaxBlock-3", "block", m.MaxBlock)
 	return m.MaxBlock, nil
 }
 

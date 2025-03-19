@@ -429,7 +429,7 @@ func zkIncrementIntermediateHashes(ctx context.Context, logPrefix string, s *sta
 
 	dbSmt.SetMaxBlock(to)
 
-	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes finished. Commiting batch", logPrefix))
+	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes finished. Commiting batch, smt max block: %d", logPrefix, to))
 
 	lr := dbSmt.LastRoot()
 

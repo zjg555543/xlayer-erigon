@@ -118,7 +118,6 @@ func (s *SMT) SetMaxBlock(b uint64) {
 	if err != nil {
 		panic(err)
 	}
-	// log.Info("zjg, SetMaxBlock---1", "block", b)
 }
 
 func (s *SMT) StartPeriodicCheck(doneChan chan bool) {
