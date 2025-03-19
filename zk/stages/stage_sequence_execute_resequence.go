@@ -51,3 +51,43 @@ func resequence(
 
 	return nil
 }
+
+func resequenceFromSMTAlignment(
+	s *stagedsync.StageState,
+	u stagedsync.Unwinder,
+	ctx context.Context,
+	cfg SequenceBlockCfg,
+	historyCfg stagedsync.HistoryCfg,
+	lastBatch, highestBatchInDs uint64,
+) (err error) {
+	log.Info(fmt.Sprintf("[%s]zjg, ResequenceFromSMTAlignment, last batch %d is lower than highest batch in datastream %d, resequencing...", s.LogPrefix(), lastBatch, highestBatchInDs))
+
+	batches, err := cfg.dataStreamServer.ReadBatches(lastBatch+1, highestBatchInDs)
+	if err != nil {
+		return err
+	}
+
+	if err = cfg.dataStreamServer.UnwindToBatchStart(lastBatch + 1); err != nil {
+		return err
+	}
+
+	log.Info(fmt.Sprintf("[%s]zjg, ResequenceFromSMTAlignment, from batch %d to %d in data stream", s.LogPrefix(), lastBatch+1, highestBatchInDs))
+	for _, batch := range batches {
+		batchJob := NewResequenceBatchJob(batch)
+		subBatchCount := 0
+		for batchJob.HasMoreBlockToProcess() {
+			if err = sequencingBatchStep(s, u, ctx, cfg, historyCfg, batchJob); err != nil {
+				return err
+			}
+
+			subBatchCount += 1
+		}
+
+		log.Info(fmt.Sprintf("[%s]zjg, ResequenceFromSMTAlignment, original batch %d with %d batches", s.LogPrefix(), batchJob.batchToProcess[0].BatchNumber, subBatchCount))
+		if cfg.zk.SequencerResequenceStrict && subBatchCount != 1 {
+			return fmt.Errorf("strict mode enabled, but resequenced batch %d has %d sub-batches", batchJob.batchToProcess[0].BatchNumber, subBatchCount)
+		}
+	}
+
+	return nil
+}

@@ -33,6 +33,7 @@ const TableHashKey = "HermezSmtHashKey"
 
 const MetaLastRoot = "lastRoot"
 const MetaDepth = "depth"
+const MetaMaxBlock = "maxBlock"
 
 var HermezSmtTables = []string{TableSmt, TableStats, TableAccountValues, TableMetadata, TableHashKey}
 
@@ -372,4 +373,31 @@ func (m *EriRoDb) GetDb() map[string][]string {
 	}
 
 	return transformedDb
+}
+
+func (m *EriRoDb) GetMaxBlock() (uint64, error) {
+	log.Info("zjg, GetMaxBlock-2-1")
+	data, err := m.kvTxRo.GetOne(TableStats, []byte(MetaMaxBlock))
+	if err != nil {
+		log.Info("zjg, GetMaxBlock-2-2", "error", err)
+		return 0, err
+	}
+
+	if data == nil {
+		log.Info("zjg, GetMaxBlock-2-3")
+		return 0, nil
+	}
+
+	// Convert the hex string to a big.Int and then to uint64
+	bigInt := utils.ConvertHexToBigInt(string(data))
+	log.Info("zjg, GetMaxBlock-2", "block", bigInt.Uint64())
+	return bigInt.Uint64(), nil
+}
+
+func (m *EriDb) SetMaxBlock(b uint64) error {
+	// Convert uint64 to big.Int and then to hex string
+	bigInt := new(big.Int).SetUint64(b)
+	v := utils.ConvertBigIntToHex(bigInt)
+	// log.Info("zjg, SetMaxBlock", "block", b)
+	return m.tx.Put(TableStats, []byte(MetaMaxBlock), []byte(v))
 }

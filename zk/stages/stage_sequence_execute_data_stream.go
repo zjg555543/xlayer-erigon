@@ -146,6 +146,20 @@ func alignExecutionToDatastream(batchContext *BatchContext, lastExecutedBlock ui
 	return false, nil
 }
 
+func alignExecutionToSMT(batchContext *BatchContext, lastExecutedBlock, smtMaxBlockNumber uint64, u stagedsync.Unwinder) (bool, error) {
+	if lastExecutedBlock > smtMaxBlockNumber {
+		block, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, smtMaxBlockNumber)
+		if err != nil {
+			return false, err
+		}
+
+		log.Warn(fmt.Sprintf("[%s] Unwinding due to SMT gap", batchContext.s.LogPrefix()), "smtHeight", smtMaxBlockNumber, "sequencerHeight", lastExecutedBlock)
+		u.UnwindTo(smtMaxBlockNumber, stagedsync.BadBlock(block.Hash(), fmt.Errorf("received bad block")))
+		return true, nil
+	}
+	return false, nil
+}
+
 func finalizeLastBatchInDatastreamIfNotFinalized(batchContext *BatchContext, batchToClose, blockToCloseAt uint64) error {
 	isLastEntryBatchEnd, err := batchContext.cfg.dataStreamServer.IsLastEntryBatchEnd()
 	if err != nil {
