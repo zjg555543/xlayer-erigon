@@ -27,17 +27,6 @@ import (
 
 var shouldCheckForExecutionAndDataStreamAlignment = true
 
-type SMTAlignmentCheckState int
-
-const (
-	// Initial state
-	SMTAlignmentInit SMTAlignmentCheckState = iota
-	// Pending resequence state
-	SMTAlignmentPendingResequence
-	// Terminated state
-	SMTAlignmentTerminated
-)
-
 var shouldCheckForExecutionAndSMTAlignment = SMTAlignmentInit
 
 // For X Layer, for local replay feature
@@ -249,7 +238,7 @@ func sequencingBatchStep(
 				}
 				log.Info(fmt.Sprintf("[%s] Checking for SMT alignment", logPrefix), "executionAt", executionAt, "smtMaxBlockNumber", smtMaxBlockNumber, "highestBlockInBatch", highestBlockInBatch)
 
-				isUnwinding, err := alignExecutionToSMT(batchContext, executionAt, highestBlockInBatch, u)
+				isUnwinding, err := unwindExecutionToSMT(batchContext, executionAt, highestBlockInBatch, u)
 				if err != nil {
 					return err
 				}

@@ -14,6 +14,17 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
+type SMTAlignmentCheckState int
+
+const (
+	// Initial state
+	SMTAlignmentInit SMTAlignmentCheckState = iota
+	// Pending resequence state
+	SMTAlignmentPendingResequence
+	// Terminated state
+	SMTAlignmentTerminated
+)
+
 func tryToSleepSequencer(localDuration time.Duration, logPrefix string) {
 	fullBatchSleepDuration := apollo.GetFullBatchSleepDuration(localDuration)
 	if fullBatchSleepDuration > 0 {
@@ -60,7 +71,7 @@ func createExternalDataStreamServer(cfg SequenceBlockCfg) (server.DataStreamServ
 	return dataStreamServer, nil
 }
 
-func alignExecutionToSMT(batchContext *BatchContext, lastExecutedBlock, smtMaxBlockNumber uint64, u stagedsync.Unwinder) (bool, error) {
+func unwindExecutionToSMT(batchContext *BatchContext, lastExecutedBlock, smtMaxBlockNumber uint64, u stagedsync.Unwinder) (bool, error) {
 	if lastExecutedBlock > smtMaxBlockNumber {
 		block, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, smtMaxBlockNumber)
 		if err != nil {
