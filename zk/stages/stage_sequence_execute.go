@@ -26,6 +26,7 @@ import (
 )
 
 var shouldCheckForExecutionAndDataStreamAlignment = true
+var shouldCheckForExecutionAndSMTAlignment = SMTAlignmentInit
 
 // For X Layer, for local replay feature
 var externalDataStreamServerCreated = false
@@ -79,6 +80,10 @@ func SpawnSequencingStage(
 		}
 	}
 
+	if lastBatch < highestBatchInDs && shouldCheckForExecutionAndSMTAlignment == SMTAlignmentPendingResequence {
+		return resequenceFromSMTAlignment(s, u, ctx, cfg, historyCfg, lastBatch, highestBatchInDs)
+	}
+
 	if lastBatch < highestBatchInDs {
 		return resequence(s, u, ctx, cfg, historyCfg, lastBatch, highestBatchInDs)
 	}
@@ -96,9 +101,7 @@ func SpawnSequencingStage(
 
 		// enable split smt db
 		if cfg.zk.XLayer.StandaloneSMTDatabase {
-			if s.BlockNumber%50 == 0 {
-				err = s.FlushSmtCache()
-			}
+			err = s.FlushSmtCache()
 		} else {
 			err = s.FlushSmtCache()
 		}
@@ -197,6 +200,53 @@ func sequencingBatchStep(
 		}
 
 		return sdb.Commit(s, true)
+	}
+
+	if shouldCheckForExecutionAndSMTAlignment == SMTAlignmentInit {
+		if !batchState.isAnyRecovery() {
+			smtMaxBlockNumber, err := sdb.eridb.GetMaxBlock()
+			if err != nil {
+				log.Error(fmt.Sprintf("[%s] Failed to get smt max block number", logPrefix), "error", err, "smtMaxBlockNumber", smtMaxBlockNumber)
+				return err
+			}
+			if smtMaxBlockNumber != 0 && smtMaxBlockNumber < executionAt {
+				batchNo, err := sdb.hermezDb.GetBatchNoByL2Block(smtMaxBlockNumber)
+				if err != nil {
+					log.Error(fmt.Sprintf("[%s] Failed to get smt max block number", logPrefix), "error", err, "smtMaxBlockNumber", smtMaxBlockNumber)
+					return err
+				}
+				if batchNo == 0 {
+					log.Info(fmt.Sprintf("[%s] SMT alignment check completed", logPrefix))
+					shouldCheckForExecutionAndSMTAlignment = SMTAlignmentTerminated
+					return nil
+				}
+				highestBlockInBatch, _, err := sdb.hermezDb.GetHighestBlockInBatch(batchNo)
+				if err != nil {
+					log.Error(fmt.Sprintf("[%s] Failed to get highest block in batch", logPrefix), "error", err, "batchNo", batchNo, "highestBlockInBatch", highestBlockInBatch)
+					return err
+				}
+				log.Info(fmt.Sprintf("[%s] Checking for SMT alignment", logPrefix), "executionAt", executionAt, "smtMaxBlockNumber", smtMaxBlockNumber, "highestBlockInBatch", highestBlockInBatch)
+
+				isUnwinding, err := unwindExecutionToSMT(batchContext, executionAt, highestBlockInBatch, u)
+				if err != nil {
+					return err
+				}
+				if isUnwinding {
+					err = sdb.tx.Commit()
+					if err != nil {
+						return err
+					}
+					// set to pending resequence state
+					shouldCheckForExecutionAndSMTAlignment = SMTAlignmentPendingResequence
+					log.Info(fmt.Sprintf("[%s] SMT alignment check triggered resequence", logPrefix))
+					return nil
+				}
+			}
+		}
+
+		// set to terminated state, indicating verification is completed
+		shouldCheckForExecutionAndSMTAlignment = SMTAlignmentTerminated
+		log.Info(fmt.Sprintf("[%s] SMT alignment check completed", logPrefix))
 	}
 
 	if shouldCheckForExecutionAndDataStreamAlignment {

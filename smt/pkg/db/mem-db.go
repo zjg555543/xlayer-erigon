@@ -21,6 +21,7 @@ type MemDb struct {
 	DbCode      map[string][]byte
 	LastRoot    *big.Int
 	Depth       uint8
+	MaxBlock    uint64
 
 	lock sync.RWMutex
 }
@@ -34,6 +35,7 @@ func NewMemDb() *MemDb {
 		DbCode:      make(map[string][]byte),
 		LastRoot:    big.NewInt(0),
 		Depth:       0,
+		MaxBlock:    0,
 	}
 }
 
@@ -289,4 +291,18 @@ func (m *MemDb) GetDb() map[string][]string {
 	defer m.lock.RUnlock()
 
 	return m.Db
+}
+
+func (m *MemDb) SetMaxBlock(value uint64) error {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	m.MaxBlock = value
+	return nil
+}
+
+func (m *MemDb) GetMaxBlock() (uint64, error) {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	return m.MaxBlock, nil
 }

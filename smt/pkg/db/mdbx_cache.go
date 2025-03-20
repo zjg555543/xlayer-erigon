@@ -342,3 +342,22 @@ func (m *EriCacheDb) GetDb() map[string][]string {
 
 	return transformedDb
 }
+
+func (m *EriCacheDb) GetMaxBlock() (uint64, error) {
+	data, err := m.kvTxRoSMT.GetOne(TableStats, []byte(MetaMaxBlock))
+	if err != nil {
+		return 0, err
+	}
+
+	if data == nil {
+		return 0, nil
+	}
+
+	return utils.ConvertHexToBigInt(string(data)).Uint64(), nil
+}
+
+func (m *EriCacheDb) SetMaxBlock(b uint64) error {
+	bigInt := new(big.Int).SetUint64(b)
+	v := utils.ConvertBigIntToHex(bigInt)
+	return m.cacheTx.Put(TableStats, []byte(MetaMaxBlock), []byte(v))
+}

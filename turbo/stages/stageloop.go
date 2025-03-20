@@ -82,7 +82,7 @@ func AsyncFlushSmtData(ctx context.Context,
 
 func FlushDataToDB(wg *sync.WaitGroup, ctx context.Context, db *mdbx.MdbxKV, logger log.Logger, smtCache map[string]map[string][]byte) {
 	defer wg.Done()
-
+	log.Info("Flushing data to DB")
 	err := db.Batch(func(tx kv.RwTx) error {
 		batch := membatch.NewHashBatchWithCache(tx, ctx.Done(), "", logger, smtCache)
 		defer batch.Close()
