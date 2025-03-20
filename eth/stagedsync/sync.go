@@ -35,9 +35,14 @@ type Sync struct {
 	logger        log.Logger
 	stagesIdsList []string
 
-	SmtCacheCh    chan map[string]map[string][]byte
-	DeltaSmtCache map[string]map[string][]byte
-	SmtCache      map[string]map[string][]byte
+	SmtCacheCh            chan SmtCacheToWrite
+	FinishedBlockHeightCh chan uint64
+	SmtCacheSnapshotList  *SmtCacheList
+}
+
+type SmtCacheToWrite struct {
+	SmtCache       map[string]map[string][]byte
+	MaxBlockHeight uint64
 }
 
 type Timing struct {
@@ -47,39 +52,44 @@ type Timing struct {
 	took     time.Duration
 }
 
-func (s *Sync) GetSmtCache() map[string]map[string][]byte { return s.SmtCache }
+func (s *Sync) UpdateSmtCacheList(blockHeight uint64) {
+	s.SmtCacheSnapshotList.delCache(blockHeight)
+}
 
-func (s *Sync) SetSmtCache(cache, deltaCache map[string]map[string][]byte) {
-	if s.SmtCache == nil {
-		s.SmtCache = make(map[string]map[string][]byte)
-	}
-	if s.DeltaSmtCache == nil {
-		s.DeltaSmtCache = make(map[string]map[string][]byte)
-	}
-
-	for table, bucket := range cache {
-		s.SmtCache[table] = bucket
+func (s *Sync) GetSmtCache() map[string]map[string][]byte {
+	_, deltaSmtCache, _ := s.SmtCacheSnapshotList.getAllCacheShapshot()
+	if deltaSmtCache == nil {
+		return map[string]map[string][]byte{}
 	}
 
-	for table, bucket := range deltaCache {
-		if existingBucket, exists := s.DeltaSmtCache[table]; exists {
-			if existingBucket == nil {
-				existingBucket = make(map[string][]byte)
-				s.DeltaSmtCache[table] = existingBucket
-			}
-			for k, v := range bucket {
-				existingBucket[k] = v
-			}
-		} else {
-			s.DeltaSmtCache[table] = bucket
-		}
+	return deltaSmtCache
+}
+
+func (s *Sync) SetSmtCache(blockNumber uint64, blockCache map[string]map[string][]byte) {
+	if s.SmtCacheSnapshotList == nil {
+		s.SmtCacheSnapshotList = NewSmtCacheList()
 	}
+
+	s.SmtCacheSnapshotList.Push(blockNumber, blockCache)
+}
+
+func (s *Sync) CachedBlockLen() int {
+	return s.SmtCacheSnapshotList.Length()
 }
 
 func (s *Sync) FlushSmtCache() error {
+	blockHeight, deltaSmtCache, _ := s.SmtCacheSnapshotList.getAllCacheShapshot()
+	if deltaSmtCache == nil {
+		return nil
+	}
+
+	cache := SmtCacheToWrite{
+		deltaSmtCache,
+		blockHeight,
+	}
+
 	select {
-	case s.SmtCacheCh <- s.DeltaSmtCache:
-		s.DeltaSmtCache = make(map[string]map[string][]byte)
+	case s.SmtCacheCh <- cache:
 		return nil
 	default:
 		return fmt.Errorf("failed to flush: channel is full or no receiver")
@@ -257,9 +267,10 @@ func New(cfg ethconfig.Sync, stagesList []*Stage, unwindOrder UnwindOrder, prune
 		logPrefixes:   logPrefixes,
 		logger:        logger,
 		stagesIdsList: stagesIdsList,
-		SmtCacheCh:    make(chan map[string]map[string][]byte, 1),
-		SmtCache:      make(map[string]map[string][]byte),
-		DeltaSmtCache: make(map[string]map[string][]byte),
+
+		SmtCacheCh:            make(chan SmtCacheToWrite, 1),
+		FinishedBlockHeightCh: make(chan uint64, 1000),
+		SmtCacheSnapshotList:  NewSmtCacheList(),
 	}
 }
 
