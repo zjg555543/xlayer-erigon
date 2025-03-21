@@ -194,6 +194,7 @@ type Ethereum struct {
 	sentryServers  []*sentry.GrpcServer
 
 	stagedSync         *stagedsync.Sync
+	verifier           *legacy_executor_verifier.LegacyExecutorVerifier
 	pipelineStagedSync *stagedsync.Sync
 	syncStages         []*stagedsync.Stage
 	syncUnwindOrder    stagedsync.UnwindOrder
@@ -1195,7 +1196,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				}
 			}
 
-			verifier := legacy_executor_verifier.NewLegacyExecutorVerifier(
+			backend.verifier = legacy_executor_verifier.NewLegacyExecutorVerifier(
 				*cfg.Zk,
 				legacyExecutors,
 				backend.chainDB,
@@ -1205,7 +1206,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			)
 
 			if cfg.Zk.Limbo {
-				limboSubPoolProcessor := txpool.NewLimboSubPoolProcessor(ctx, cfg.Zk, backend.chainConfig, backend.chainDB, backend.txPool2, verifier)
+				limboSubPoolProcessor := txpool.NewLimboSubPoolProcessor(ctx, cfg.Zk, backend.chainConfig, backend.chainDB, backend.txPool2, backend.verifier)
 				limboSubPoolProcessor.StartWork()
 			}
 
@@ -1243,7 +1244,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				l1BlockSyncer,
 				backend.txPool2,
 				backend.txPool2DB,
-				verifier,
+				backend.verifier,
 				l1InfoTreeUpdater,
 			)
 
@@ -1355,6 +1356,9 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 	var err error
 
 	s.stagedSync = stagedsync.New(s.config.Sync, s.syncStages, s.syncUnwindOrder, s.syncPruneOrder, s.logger)
+	if s.verifier != nil {
+		s.verifier.SetSmtCache(s.stagedSync.GetCache())
+	}
 
 	if chainConfig.Bor == nil {
 		s.sentriesClient.Hd.StartPoSDownloader(s.sentryCtx, s.sentriesClient.SendHeaderRequest, s.sentriesClient.Penalize)

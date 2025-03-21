@@ -276,8 +276,7 @@ func sequencingBatchStep(
 		shouldCheckForExecutionAndDataStreamAlignment = false
 	}
 
-	smtSnapShotCache := s.GetSmtHistorySnapshotCache(executionAt)
-	needsUnwind, exitStage, err := tryHaltSequencer(batchContext, batchState, streamWriter, u, executionAt, smtSnapShotCache)
+	needsUnwind, exitStage, err := tryHaltSequencer(batchContext, batchState, streamWriter, u, executionAt, s)
 	if needsUnwind || err != nil {
 		return err
 	}
@@ -889,7 +888,7 @@ func sequencingBatchStep(
 			return err
 		}
 
-		cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.XLayer.ExecutorMock, batchContext.cfg.zk.SequencerBatchVerificationTimeout, batchContext.cfg.zk.SequencerBatchVerificationRetries, smtSnapShotCache)
+		cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.XLayer.ExecutorMock, batchContext.cfg.zk.SequencerBatchVerificationTimeout, batchContext.cfg.zk.SequencerBatchVerificationRetries)
 
 		// For X Layer, local replay's feature of stateroot mismatch detection
 		if cfg.zk.XLayer.SequencerReplay {
@@ -906,7 +905,7 @@ func sequencingBatchStep(
 		}
 
 		// check for new responses from the verifier
-		needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u, smtSnapShotCache)
+		needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u, s)
 
 		// lets commit everything after updateStreamAndCheckRollback no matter of its result unless
 		// we're in L1 recovery where losing some blocks on restart doesn't matter

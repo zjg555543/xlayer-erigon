@@ -434,7 +434,7 @@ func updateSequencerProgress(tx kv.RwTx, newHeight uint64, newBatch uint64, unwi
 	return nil
 }
 
-func tryHaltSequencer(batchContext *BatchContext, batchState *BatchState, streamWriter *SequencerBatchStreamWriter, u stagedsync.Unwinder, latestBlock uint64, cache map[string]map[string][]byte) (bool, bool, error) {
+func tryHaltSequencer(batchContext *BatchContext, batchState *BatchState, streamWriter *SequencerBatchStreamWriter, u stagedsync.Unwinder, latestBlock uint64, s *stagedsync.StageState) (bool, bool, error) {
 	if batchContext.cfg.zk.SequencerHaltOnBatchNumber != 0 && batchContext.cfg.zk.SequencerHaltOnBatchNumber == batchState.batchNumber {
 		log.Info(fmt.Sprintf("[%s] Attempting to halt on batch %v, checking for pending verifications", batchContext.s.LogPrefix(), batchState.batchNumber))
 
@@ -444,7 +444,7 @@ func tryHaltSequencer(batchContext *BatchContext, batchState *BatchState, stream
 			if pending, count := batchContext.cfg.legacyVerifier.HasPendingVerifications(); pending {
 				log.Info(fmt.Sprintf("[%s] Waiting for pending verifications to complete before halting sequencer...", batchContext.s.LogPrefix()), "count", count)
 				time.Sleep(2 * time.Second)
-				needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u, cache)
+				needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u, s)
 				if needsUnwind || err != nil {
 					return needsUnwind, false, err
 				}

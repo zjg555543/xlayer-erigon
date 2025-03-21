@@ -62,24 +62,25 @@ func AsyncFlushSmtData(ctx context.Context,
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
+	cache := s.GetCache()
 	for {
 		select {
-		case smtCacheToWrite, ok := <-s.SmtCacheCh:
+		case smtCacheToWrite, ok := <-cache.SmtCacheDataCh:
 			if !ok {
 				logger.Info("SmtCacheCh closed, stopping AsyncFlushSmtData")
 				return
 			}
 
 			wg.Add(1)
-			go FlushDataToDB(&wg, ctx, db, logger, smtCacheToWrite.SmtCache, smtCacheToWrite.MaxBlockHeight, s.FinishedBlockHeightCh)
+			go FlushDataToDB(&wg, ctx, db, logger, smtCacheToWrite.SmtCacheData, smtCacheToWrite.MaxBlockHeight, cache.FinishedBlockHeightCh)
 
-		case maxBlockHeight, ok := <-s.FinishedBlockHeightCh:
+		case maxBlockHeight, ok := <-cache.FinishedBlockHeightCh:
 			if !ok {
 				logger.Info("FinishedBlockHeightCh closed, stopping update smt cache")
 				return
 			}
 
-			s.TruncateSmtCacheList(maxBlockHeight)
+			cache.TruncateSmtCacheList(maxBlockHeight)
 		case <-ctx.Done():
 			logger.Info("AsyncFlushSmtData received stop signal", "reason", ctx.Err())
 			return

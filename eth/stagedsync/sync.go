@@ -17,6 +17,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk"
+	"github.com/ledgerwatch/erigon/zk/smt"
 )
 
 type Sync struct {
@@ -35,17 +36,7 @@ type Sync struct {
 	logger        log.Logger
 	stagesIdsList []string
 
-	SmtCacheCh            chan SmtCacheToWrite
-	FinishedBlockHeightCh chan uint64
-	SmtCacheSnapshotList  *SmtCacheList
-
-	LongLivedSmtCache map[string]map[string][]byte
-	lastCleanHeight   uint64
-}
-
-type SmtCacheToWrite struct {
-	SmtCache       map[string]map[string][]byte
-	MaxBlockHeight uint64
+	cache *smt.SmtCache
 }
 
 type Timing struct {
@@ -57,64 +48,31 @@ type Timing struct {
 
 // TruncateSmtCacheList delete all the block snapshot cache that is lower than the target blockHeight
 func (s *Sync) TruncateSmtCacheList(blockHeight uint64) {
-	s.SmtCacheSnapshotList.delCache(blockHeight)
+	s.cache.TruncateSmtCacheList(blockHeight)
+}
+
+func (s *Sync) GetCache() *smt.SmtCache {
+	return s.cache
 }
 
 func (s *Sync) GetSmtCache() map[string]map[string][]byte {
-	return s.LongLivedSmtCache
+	return s.cache.GetSmtCache()
 }
 
 func (s *Sync) GetSmtSnapshotCache(blockNumber uint64) map[string]map[string][]byte {
-	cache, _ := s.SmtCacheSnapshotList.getCacheShapshot(blockNumber, false)
-	if cache == nil {
-		cache = map[string]map[string][]byte{}
-	}
-
-	return cache
+	return s.cache.GetSmtSnapshotCache(blockNumber)
 }
 
 func (s *Sync) SetSmtCache(blockNumber uint64, longLivedCache, blockCache map[string]map[string][]byte) {
-	if s.SmtCacheSnapshotList == nil {
-		s.SmtCacheSnapshotList = NewSmtCacheList()
-	}
-
-	s.SmtCacheSnapshotList.Push(blockNumber, blockCache)
-
-	if blockNumber-s.lastCleanHeight > 10000 {
-		_, deltaSmtCache, _ := s.SmtCacheSnapshotList.getAllCacheShapshot(true)
-		if deltaSmtCache == nil {
-			deltaSmtCache = map[string]map[string][]byte{}
-		}
-
-		// Reset LongLivedSmtCache, prevent excessive memory usage.
-		s.LongLivedSmtCache = deltaSmtCache
-		s.lastCleanHeight = blockNumber
-	} else {
-		s.LongLivedSmtCache = longLivedCache
-	}
+	s.cache.SetSmtCache(blockNumber, longLivedCache, blockCache)
 }
 
 func (s *Sync) CachedBlockLen() int {
-	return s.SmtCacheSnapshotList.Length()
+	return s.cache.CachedBlockLen()
 }
 
 func (s *Sync) FlushSmtCache() error {
-	blockHeight, deltaSmtCache, _ := s.SmtCacheSnapshotList.getAllCacheShapshot(false)
-	if deltaSmtCache == nil {
-		return nil
-	}
-
-	cache := SmtCacheToWrite{
-		deltaSmtCache,
-		blockHeight,
-	}
-
-	select {
-	case s.SmtCacheCh <- cache:
-		return nil
-	default:
-		return fmt.Errorf("failed to flush: channel is full or no receiver")
-	}
+	return s.cache.FlushSmtCache()
 }
 
 func (s *Sync) Len() int {
@@ -288,12 +246,7 @@ func New(cfg ethconfig.Sync, stagesList []*Stage, unwindOrder UnwindOrder, prune
 		logPrefixes:   logPrefixes,
 		logger:        logger,
 		stagesIdsList: stagesIdsList,
-
-		SmtCacheCh:            make(chan SmtCacheToWrite, 1),
-		FinishedBlockHeightCh: make(chan uint64, 1000),
-		SmtCacheSnapshotList:  NewSmtCacheList(),
-		LongLivedSmtCache:     make(map[string]map[string][]byte),
-		lastCleanHeight:       uint64(0),
+		cache:         smt.CreateNewSmtCache(),
 	}
 }
 

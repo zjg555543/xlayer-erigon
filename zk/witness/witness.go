@@ -200,7 +200,6 @@ func (g *Generator) generateWitness(tx kv.Tx, txsmt kv.Tx, ctx context.Context, 
 			return nil, err
 		}
 		if cache != nil {
-			// TODO: set the cached value to memdb
 			for table, bucket := range cache {
 				for k, v := range bucket {
 					rwtxsmt.Put(table, []byte(k), v)

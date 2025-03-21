@@ -1,4 +1,4 @@
-package stagedsync
+package smt
 
 import (
 	"github.com/ledgerwatch/log/v3"
