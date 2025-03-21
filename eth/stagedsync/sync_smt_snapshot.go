@@ -14,16 +14,18 @@ type SmtCacheSnapshot struct {
 
 // SmtCacheList manages the singly linked list
 type SmtCacheList struct {
-	head   *SmtCacheSnapshot // Head of the list (most recent snapshot)
-	length int               // Current number of nodes in the list
-	mutex  sync.RWMutex      // Read-write mutex for concurrent access
+	head      *SmtCacheSnapshot // Head of the list (most recent snapshot)
+	length    int               // Current number of nodes in the list
+	maxHeight uint64
+	mutex     sync.RWMutex // Read-write mutex for concurrent access
 }
 
 // NewSmtCacheList creates a new empty linked list
 func NewSmtCacheList() *SmtCacheList {
 	return &SmtCacheList{
-		head:   nil,
-		length: 0,
+		head:      nil,
+		length:    0,
+		maxHeight: uint64(0),
 	}
 }
 
@@ -38,11 +40,15 @@ func (l *SmtCacheList) Push(blockHeight uint64, deltaSmtCache map[string]map[str
 		parentSnapshot: l.head,
 	}
 	l.head = newNode
+	l.maxHeight = blockHeight
 	l.length++ // Increment length when adding a node
 }
 
 // findNode finds a node by BlockHeight (helper method)
 func (l *SmtCacheList) findNode(blockHeight uint64) *SmtCacheSnapshot {
+	l.mutex.RLock() // Read lock for read-only operation
+	defer l.mutex.RUnlock()
+
 	current := l.head
 	for current != nil {
 		if current.BlcokHeight == blockHeight {
@@ -55,7 +61,7 @@ func (l *SmtCacheList) findNode(blockHeight uint64) *SmtCacheSnapshot {
 
 // getCacheShapshot retrieves the DeltaSmtCache for a given BlockHeight and merges it with all parent snapshots,
 // return deep copy data
-func (l *SmtCacheList) getCacheShapshot(blockHeight uint64) (map[string]map[string][]byte, bool) {
+func (l *SmtCacheList) getCacheShapshot(blockHeight uint64, needCopy bool) (map[string]map[string][]byte, bool) {
 	l.mutex.RLock() // Read lock for read-only operation
 	defer l.mutex.RUnlock()
 
@@ -78,10 +84,13 @@ func (l *SmtCacheList) getCacheShapshot(blockHeight uint64) (map[string]map[stri
 			for innerKey, value := range innerMap {
 				// If the key already exists, keep the earliest value (parent priority)
 				if _, exists := mergedCache[outerKey][innerKey]; !exists {
-					// Create a deep copy of the byte slice
-					valueCopy := make([]byte, len(value))
-					copy(valueCopy, value)
-					mergedCache[outerKey][innerKey] = valueCopy
+					if needCopy {
+						valueCopy := make([]byte, len(value))
+						copy(valueCopy, value)
+						mergedCache[outerKey][innerKey] = valueCopy
+					} else {
+						mergedCache[outerKey][innerKey] = value
+					}
 				}
 			}
 		}
@@ -92,7 +101,7 @@ func (l *SmtCacheList) getCacheShapshot(blockHeight uint64) (map[string]map[stri
 }
 
 // getCacheShapshot retrieves all DeltaSmtCache and merges it with all parent snapshots
-func (l *SmtCacheList) getAllCacheShapshot() (uint64, map[string]map[string][]byte, bool) {
+func (l *SmtCacheList) getAllCacheShapshot(needDeepCopy bool) (uint64, map[string]map[string][]byte, bool) {
 	l.mutex.RLock() // Read lock for read-only operation
 	defer l.mutex.RUnlock()
 
@@ -103,7 +112,7 @@ func (l *SmtCacheList) getAllCacheShapshot() (uint64, map[string]map[string][]by
 		return headBlockNumber, nil, false
 	}
 
-	cache, found := l.getCacheShapshot(headBlockNumber)
+	cache, found := l.getCacheShapshot(headBlockNumber, needDeepCopy)
 	return headBlockNumber, cache, found
 
 }
@@ -162,4 +171,12 @@ func (l *SmtCacheList) Length() int {
 	defer l.mutex.RUnlock()
 
 	return l.length // Directly return cached length
+}
+
+// Length returns the number of nodes in the list
+func (l *SmtCacheList) MaxBlockHeight() uint64 {
+	l.mutex.RLock() // Read lock for read-only operation
+	defer l.mutex.RUnlock()
+
+	return l.maxHeight // Directly return cached length
 }

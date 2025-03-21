@@ -51,8 +51,12 @@ func (s *StageState) GetSmtCache() map[string]map[string][]byte {
 	return s.state.GetSmtCache()
 }
 
-func (s *StageState) SetSmtCache(blockNumber uint64, blockCache map[string]map[string][]byte) {
-	s.state.SetSmtCache(blockNumber, blockCache)
+func (s *StageState) GetSmtHistorySnapshotCache(blockNumber uint64) map[string]map[string][]byte {
+	return s.state.GetSmtSnapshotCache(blockNumber)
+}
+
+func (s *StageState) SetSmtCache(blockNumber uint64, longLivedSmtCache, blockCache map[string]map[string][]byte) {
+	s.state.SetSmtCache(blockNumber, longLivedSmtCache, blockCache)
 }
 
 func (s *StageState) CachedBlockLen() int {

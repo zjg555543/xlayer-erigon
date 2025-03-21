@@ -246,7 +246,7 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 		expectedRootHash = syncHeadHeader.Root
 	}
 
-	if _, err = zkSmt.UnwindZkSMT(ctx, s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, txsmt, cfg.checkRoot, &expectedRootHash, silent, s.GetSmtCache()); err != nil {
+	if _, err = zkSmt.UnwindZkSMT(ctx, s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, txsmt, cfg.checkRoot, &expectedRootHash, silent, s.GetSmtHistorySnapshotCache(s.BlockNumber)); err != nil {
 		return err
 	}
 	hermezDb := hermez_db.NewHermezDb(tx)

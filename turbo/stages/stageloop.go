@@ -79,7 +79,7 @@ func AsyncFlushSmtData(ctx context.Context,
 				return
 			}
 
-			s.UpdateSmtCacheList(maxBlockHeight)
+			s.TruncateSmtCacheList(maxBlockHeight)
 		case <-ctx.Done():
 			logger.Info("AsyncFlushSmtData received stop signal", "reason", ctx.Err())
 			return

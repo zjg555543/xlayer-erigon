@@ -314,18 +314,21 @@ func (m *Mapmutation) SetCache(cache map[string]map[string][]byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.puts == nil {
-		m.puts = make(map[string]map[string][]byte)
-	}
+	m.puts = cache
 
-	for table, bucket := range cache {
-		m.puts[table] = make(map[string][]byte)
-
-		for k, v := range bucket {
-			m.puts[table][k] = make([]byte, len(v))
-			copy(m.puts[table][k], v)
-		}
-	}
+	// deep copy
+	//if m.puts == nil {
+	//	m.puts = make(map[string]map[string][]byte)
+	//}
+	//
+	//for table, bucket := range cache {
+	//	m.puts[table] = make(map[string][]byte)
+	//
+	//	for k, v := range bucket {
+	//		m.puts[table][k] = make([]byte, len(v))
+	//		copy(m.puts[table][k], v)
+	//	}
+	//}
 }
 
 func (m *Mapmutation) RetrieveAndCleanSmtCache(smtTables []string) (map[string]map[string][]byte, map[string]map[string][]byte) {

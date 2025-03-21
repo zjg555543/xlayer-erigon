@@ -38,6 +38,9 @@ type Sync struct {
 	SmtCacheCh            chan SmtCacheToWrite
 	FinishedBlockHeightCh chan uint64
 	SmtCacheSnapshotList  *SmtCacheList
+
+	LongLivedSmtCache map[string]map[string][]byte
+	lastCleanHeight   uint64
 }
 
 type SmtCacheToWrite struct {
@@ -52,25 +55,43 @@ type Timing struct {
 	took     time.Duration
 }
 
-func (s *Sync) UpdateSmtCacheList(blockHeight uint64) {
+// TruncateSmtCacheList delete all the block snapshot cache that is lower than the target blockHeight
+func (s *Sync) TruncateSmtCacheList(blockHeight uint64) {
 	s.SmtCacheSnapshotList.delCache(blockHeight)
 }
 
 func (s *Sync) GetSmtCache() map[string]map[string][]byte {
-	_, deltaSmtCache, _ := s.SmtCacheSnapshotList.getAllCacheShapshot()
-	if deltaSmtCache == nil {
-		return map[string]map[string][]byte{}
-	}
-
-	return deltaSmtCache
+	return s.LongLivedSmtCache
 }
 
-func (s *Sync) SetSmtCache(blockNumber uint64, blockCache map[string]map[string][]byte) {
+func (s *Sync) GetSmtSnapshotCache(blockNumber uint64) map[string]map[string][]byte {
+	cache, _ := s.SmtCacheSnapshotList.getCacheShapshot(blockNumber, false)
+	if cache == nil {
+		cache = map[string]map[string][]byte{}
+	}
+
+	return cache
+}
+
+func (s *Sync) SetSmtCache(blockNumber uint64, longLivedCache, blockCache map[string]map[string][]byte) {
 	if s.SmtCacheSnapshotList == nil {
 		s.SmtCacheSnapshotList = NewSmtCacheList()
 	}
 
 	s.SmtCacheSnapshotList.Push(blockNumber, blockCache)
+
+	if blockNumber-s.lastCleanHeight > 10000 {
+		_, deltaSmtCache, _ := s.SmtCacheSnapshotList.getAllCacheShapshot(true)
+		if deltaSmtCache == nil {
+			deltaSmtCache = map[string]map[string][]byte{}
+		}
+
+		// Reset LongLivedSmtCache, prevent excessive memory usage.
+		s.LongLivedSmtCache = deltaSmtCache
+		s.lastCleanHeight = blockNumber
+	} else {
+		s.LongLivedSmtCache = longLivedCache
+	}
 }
 
 func (s *Sync) CachedBlockLen() int {
@@ -78,7 +99,7 @@ func (s *Sync) CachedBlockLen() int {
 }
 
 func (s *Sync) FlushSmtCache() error {
-	blockHeight, deltaSmtCache, _ := s.SmtCacheSnapshotList.getAllCacheShapshot()
+	blockHeight, deltaSmtCache, _ := s.SmtCacheSnapshotList.getAllCacheShapshot(false)
 	if deltaSmtCache == nil {
 		return nil
 	}
@@ -271,6 +292,8 @@ func New(cfg ethconfig.Sync, stagesList []*Stage, unwindOrder UnwindOrder, prune
 		SmtCacheCh:            make(chan SmtCacheToWrite, 1),
 		FinishedBlockHeightCh: make(chan uint64, 1000),
 		SmtCacheSnapshotList:  NewSmtCacheList(),
+		LongLivedSmtCache:     make(map[string]map[string][]byte),
+		lastCleanHeight:       uint64(0),
 	}
 }
 

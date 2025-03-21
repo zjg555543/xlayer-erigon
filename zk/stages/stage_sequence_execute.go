@@ -101,7 +101,7 @@ func SpawnSequencingStage(
 
 		// enable split smt db
 		if cfg.zk.XLayer.StandaloneSMTDatabase {
-			if s.CachedBlockLen() >= 20 {
+			if s.CachedBlockLen() >= 50 {
 				err = s.FlushSmtCache()
 			}
 		} else {
@@ -145,9 +145,8 @@ func sequencingBatchStep(
 	}
 	defer sdb.Rollback()
 
-	smtCacheData := s.GetSmtCache()
 	if sdb.supportAC {
-		sdb.eridb.SetCache(smtCacheData)
+		sdb.eridb.SetCache(s.GetSmtCache())
 	}
 
 	if err = cfg.infoTreeUpdater.WarmUp(sdb.tx); err != nil {
@@ -277,7 +276,8 @@ func sequencingBatchStep(
 		shouldCheckForExecutionAndDataStreamAlignment = false
 	}
 
-	needsUnwind, exitStage, err := tryHaltSequencer(batchContext, batchState, streamWriter, u, executionAt, smtCacheData)
+	smtSnapShotCache := s.GetSmtHistorySnapshotCache(executionAt)
+	needsUnwind, exitStage, err := tryHaltSequencer(batchContext, batchState, streamWriter, u, executionAt, smtSnapShotCache)
 	if needsUnwind || err != nil {
 		return err
 	}
@@ -354,7 +354,6 @@ func sequencingBatchStep(
 	// until the next batch starts
 	sendersToSkip := make(map[common.Address]struct{})
 
-	batchSmtCache := smtCacheData // Shallow copy
 	for blockNumber := executionAt + 1; runLoopBlocks; blockNumber++ {
 		if batchTimedOut {
 			log.Debug(fmt.Sprintf("[%s] Closing batch due to timeout", logPrefix))
@@ -808,8 +807,8 @@ func sequencingBatchStep(
 
 		if batchContext.sdb.supportAC {
 			quit := batchContext.ctx.Done()
-			batchContext.sdb.eridb.OpenBatch(quit)         // do nothing...
-			batchContext.sdb.eridb.SetCache(batchSmtCache) // will deep copy in internal function
+			batchContext.sdb.eridb.OpenBatch(quit)           // do nothing...
+			batchContext.sdb.eridb.SetCache(s.GetSmtCache()) // will deep copy in internal function
 			if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
 				batchContext.sdb.eridb.RollbackBatch()
 				return err
@@ -818,8 +817,7 @@ func sequencingBatchStep(
 			if err := batchContext.sdb.eridb.CommitBatch(); err != nil {
 				return err
 			}
-			s.SetSmtCache(blockNumber, blockCache)
-			batchSmtCache = smtCache //Shallow copy
+			s.SetSmtCache(blockNumber, smtCache, blockCache)
 		} else {
 			quit := batchContext.ctx.Done()
 			batchContext.sdb.eridb.OpenBatch(quit)
@@ -891,7 +889,7 @@ func sequencingBatchStep(
 			return err
 		}
 
-		cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.XLayer.ExecutorMock, batchContext.cfg.zk.SequencerBatchVerificationTimeout, batchContext.cfg.zk.SequencerBatchVerificationRetries, smtCacheData)
+		cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.XLayer.ExecutorMock, batchContext.cfg.zk.SequencerBatchVerificationTimeout, batchContext.cfg.zk.SequencerBatchVerificationRetries, smtSnapShotCache)
 
 		// For X Layer, local replay's feature of stateroot mismatch detection
 		if cfg.zk.XLayer.SequencerReplay {
@@ -908,7 +906,7 @@ func sequencingBatchStep(
 		}
 
 		// check for new responses from the verifier
-		needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u, smtCacheData)
+		needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u, smtSnapShotCache)
 
 		// lets commit everything after updateStreamAndCheckRollback no matter of its result unless
 		// we're in L1 recovery where losing some blocks on restart doesn't matter
@@ -960,8 +958,6 @@ func sequencingBatchStep(
 
 	batchTime := time.Since(batchStart)
 	metrics.BatchExecuteTime(string(batchCloseReason), batchTime)
-
-	smtCacheData = batchSmtCache //Shallow copy
 
 	return err
 }
