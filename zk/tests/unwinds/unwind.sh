@@ -74,15 +74,11 @@ dump_data() {
     go run ./cmd/hack --action=dumpAll --chaindata="$dataPath/rpc-datadir/chaindata" --output="$dataPath/$stop" || { echo "Failed to dump data for $label"; exit 1; }
 }
 
-# 添加 AC_SPLIT 参数判断
 AC_SPLIT=${1:-false}
 
-# 准备基础配置文件
 CONFIG_FILE="zk/tests/unwinds/config/dynamic-integration8.yaml"
 
-# 如果 AC_SPLIT 为 true，添加额外参数
 if [ "$AC_SPLIT" = "true" ]; then
-    # 在配置文件中添加额外参数
     echo "zkevm.standalone-smt-db: true" >> "$CONFIG_FILE"
     echo "zkevm.enable-async-commit: true" >> "$CONFIG_FILE"
 fi
