@@ -11,6 +11,9 @@ on:
 jobs:
   fixing-unwinds-tests:
     runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        ac-split: ["true", "false"]
 
     steps:
       - name: Checkout cdk-erigon
@@ -48,6 +51,6 @@ jobs:
         run: |
           cd ./cdk-erigon
           chmod +x ./zk/tests/unwinds/unwind.sh
-          ./zk/tests/unwinds/unwind.sh
+          ./zk/tests/unwinds/unwind.sh "${{ matrix.ac-split }}"
 
   

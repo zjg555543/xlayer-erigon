@@ -74,11 +74,24 @@ dump_data() {
     go run ./cmd/hack --action=dumpAll --chaindata="$dataPath/rpc-datadir/chaindata" --output="$dataPath/$stop" || { echo "Failed to dump data for $label"; exit 1; }
 }
 
+# 添加 AC_SPLIT 参数判断
+AC_SPLIT=${1:-false}
+
+# 准备基础配置文件
+CONFIG_FILE="zk/tests/unwinds/config/dynamic-integration8.yaml"
+
+# 如果 AC_SPLIT 为 true，添加额外参数
+if [ "$AC_SPLIT" = "true" ]; then
+    # 在配置文件中添加额外参数
+    echo "zkevm.standalone-smt-db: true" >> "$CONFIG_FILE"
+    echo "zkevm.enable-async-commit: true" >> "$CONFIG_FILE"
+fi
+
 # Run Erigon to first stop
 echo "[$(date)] Running Erigon to BlockHeight: $firstStop"
 ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
-    --config="zk/tests/unwinds/config/dynamic-integration8.yaml" \
+    --config="$CONFIG_FILE" \
     --debug.limit="$firstStop"
 
 dump_data "$firstStop" "sync to first stop"
@@ -87,7 +100,7 @@ dump_data "$firstStop" "sync to first stop"
 echo "[$(date)] Running Erigon to BlockHeight: $secondStop"
 ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
-    --config="zk/tests/unwinds/config/dynamic-integration8.yaml" \
+    --config="$CONFIG_FILE" \
     --debug.limit="$secondStop"
 
 dump_data "$secondStop" "sync to second stop"
@@ -96,7 +109,7 @@ dump_data "$secondStop" "sync to second stop"
 echo "[$(date)] Unwinding to batch: $unwindBatch"
 go run ./cmd/integration state_stages_zkevm \
     --datadir="$dataPath/rpc-datadir" \
-    --config="zk/tests/unwinds/config/dynamic-integration8.yaml" \
+    --config="$CONFIG_FILE" \
     --chain=dynamic-integration \
     --unwind-batch-no="$unwindBatch" || { echo "Failed to unwind"; exit 1; }
 
@@ -170,7 +183,7 @@ compare_dumps "$dataPath/${firstStop}" "$dataPath/${firstStop}-unwound" "Unwind 
 echo "[$(date)] Resyncing Erigon to second stop: $secondStop"
 ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
-    --config="zk/tests/unwinds/config/dynamic-integration8.yaml" \
+    --config="$CONFIG_FILE" \
     --debug.limit="$secondStop"
 
 dump_data "${secondStop}-sync-again" "after resyncing to second stop"
