@@ -23,6 +23,9 @@ env:
 jobs:
   resequence-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ac-split: ["true", "false"]
     steps:
       - name: Checkout cdk-erigon
         uses: actions/checkout@v4
@@ -31,7 +34,7 @@ jobs:
 
       - name: Test resequence
         working-directory: ./cdk-erigon
-        run: .github/scripts/test_resequence.sh
+        run: .github/scripts/test_resequence.sh "${{ matrix.ac-split }}"
           
       - name: Upload logs
         uses: actions/upload-artifact@v4

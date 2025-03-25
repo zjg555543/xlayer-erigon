@@ -111,6 +111,11 @@ set -e
 
 stop_cdk_erigon_sequencer
 
+AC_SPLIT=${1:-false}
+if [ "$AC_SPLIT" = "true" ]; then
+    kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 'sed -i "$a zkevm.standalone-smt-db: true\nzkevm.enable-async-commit: true" /etc/cdk-erigon/config.yaml'
+fi
+
 echo "Copying and modifying config"
 kurtosis service exec cdk-v1  cdk-erigon-sequencer-001 'cp \-r /etc/cdk-erigon/ /tmp/ && sed -i '\''s/zkevm\.executor-strict: true/zkevm.executor-strict: false/;s/zkevm\.executor-urls: zkevm-stateless-executor-001:50071/zkevm.executor-urls: ","/;$a zkevm.disable-virtual-counters: true'\'' /tmp/cdk-erigon/config.yaml'
 
