@@ -97,7 +97,7 @@ services:
 
   xlayer-seq:
     container_name: xlayer-seq
-    image: cdk-erigon  # 确保此镜像已使用支持调试的Dockerfile构建
+    image: cdk-erigon
     environment:
       - CDK_ERIGON_SEQUENCER=1
       - WRITE_MAP=true
@@ -106,7 +106,6 @@ services:
       - 8123:8545
       - 6900:6900
       - 9092:9095
-      - 2345:2345  # 添加Delve调试端口映射
     volumes:
       - ./data/seq/:/home/erigon/data/
       - ./config/test.erigon.seq.config.yaml:/usr/src/app/config.yaml
@@ -115,8 +114,6 @@ services:
       - ./config/dynamic-mynetwork-conf.json:/usr/src/app/dynamic-mynetwork-conf.json
     command: >
       cdk-erigon --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
-#      dlv --listen=:2345 --headless=true --api-version=2 --accept-multiclient exec /usr/local/bin/cdk-erigon --
-#      --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
 
   xlayer-rpc:
     container_name: xlayer-rpc
@@ -364,7 +361,7 @@ services:
 
   prometheus:
     image: prom/prometheus:v2.51.2
-    command: 
+    command:
       - --log.level=warn
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus

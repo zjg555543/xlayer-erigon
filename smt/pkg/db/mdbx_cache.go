@@ -22,7 +22,7 @@ type EriCacheDb struct {
 }
 
 func NewEriCacheDb(ctx context.Context, txsmt kv.Tx, txcdb kv.RwTx) *EriCacheDb {
-	batch := membatch.NewHashBatch(txsmt, ctx.Done(), "./tempdb", log.New())
+	batch := membatch.NewHashCacheBatch(txsmt, ctx.Done(), "./tempdb-cache", log.New())
 	defer func() {
 		batch.Close()
 	}()
@@ -42,33 +42,21 @@ func (m *EriCacheDb) SetCache(smtCachedMapValue map[string]map[string][]byte) {
 		smtCachedMapValue = make(map[string]map[string][]byte)
 	}
 
-	mapCache, ok := m.cacheTx.(*membatch.Mapmutation)
+	mapCache, ok := m.cacheTx.(*membatch.MapmutationWithDoubleCache)
 	if !ok {
 		return // don't roll back a kvRw tx
 	}
 
 	mapCache.SetCache(smtCachedMapValue)
-
-	//batch := membatch.NewHashBatchWithCache(m.kvTx, quitCh, "./tempdb", log.New(), smtCachedMapValue)
-	// WARN: cannnot close batch here, or it will clean all the cache value
-	//defer func() {
-	//	batch.Close()
-	//}()
-
-	//m.cacheTx = batch
-	//m.kvTxRo = batch
 }
 
-func (m *EriCacheDb) RetriveAndCleanCache() (map[string]map[string][]byte, map[string]map[string][]byte) {
-	mapCache, ok := m.cacheTx.(*membatch.Mapmutation)
+func (m *EriCacheDb) RetriveAndCleanCache() map[string]map[string][]byte {
+	mapCache, ok := m.cacheTx.(*membatch.MapmutationWithDoubleCache)
 	if !ok {
-		return nil, nil // don't roll back a kvRw tx
+		return nil // don't roll back a kvRw tx
 	}
 
-	smtCache, deltaSmtCache := mapCache.RetrieveAndCleanSmtCache(HermezSmtTables)
-	mapCache.ResetCacheContent()
-
-	return smtCache, deltaSmtCache
+	return mapCache.RetrieveAndCleanSmtCache(HermezSmtTables)
 }
 
 func (m *EriCacheDb) CommitBatch() error {
@@ -79,7 +67,7 @@ func (m *EriCacheDb) CommitBatch() error {
 	batch.Close()
 
 	m.cacheTx = batch
-	m.kvTxRo = batch
+	m.kvTxRoSMT = batch
 	return nil
 }
 
@@ -91,11 +79,11 @@ func (m *EriCacheDb) RollbackBatch() {
 	batch.Close()
 
 	m.cacheTx = batch
-	m.kvTxRo = batch
+	m.kvTxRoSMT = batch
 }
 
 func (m *EriCacheDb) GetLastRoot() (*big.Int, error) {
-	data, err := m.kvTxRo.GetOne(TableStats, []byte(MetaLastRoot))
+	data, err := m.kvTxRoSMT.GetOne(TableStats, []byte(MetaLastRoot))
 	if err != nil {
 		return big.NewInt(0), err
 	}
@@ -112,8 +100,22 @@ func (m *EriCacheDb) SetLastRoot(r *big.Int) error {
 	return m.cacheTx.Put(TableStats, []byte(MetaLastRoot), []byte(v))
 }
 
+func (m *EriCacheDb) GetLastHeight() (uint64, error) {
+	data, err := m.kvTxRoSMT.GetOne(TableStats, []byte(MetaLastHeight))
+	if err != nil {
+		return 0, err
+	}
+
+	return utils.ConvertBytesToUint64(data)
+}
+
+func (m *EriCacheDb) SetLastHeight(blockHeight uint64) error {
+	v := utils.ConvertUint64ToBytes(blockHeight)
+	return m.cacheTx.Put(TableStats, []byte(MetaLastHeight), []byte(v))
+}
+
 func (m *EriCacheDb) GetDepth() (uint8, error) {
-	data, err := m.kvTxRo.GetOne(TableStats, []byte(MetaDepth))
+	data, err := m.kvTxRoSMT.GetOne(TableStats, []byte(MetaDepth))
 	if err != nil {
 		return 0, err
 	}
@@ -130,10 +132,9 @@ func (m *EriCacheDb) SetDepth(depth uint8) error {
 }
 
 func (m *EriCacheDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {
-	keyConc := utils.ArrayToScalar(key[:])
-	k := utils.ConvertBigIntToHex(keyConc)
+	k := utils.ArrayToHex(key[:])
 
-	data, err := m.kvTxRo.GetOne(TableSmt, []byte(k))
+	data, err := m.kvTxRoSMT.GetOne(TableSmt, utils.UnsafeStringToBytes(k))
 	if err != nil {
 		return utils.NodeValue12{}, err
 	}
@@ -142,23 +143,19 @@ func (m *EriCacheDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {
 		return utils.NodeValue12{}, nil
 	}
 
-	vConc := utils.ConvertHexToBigInt(string(data))
+	vConc := utils.ConvertHexToBigInt(utils.UnsafeBytesToString(data))
 	val := utils.ScalarToNodeValue(vConc)
 
 	return val, nil
 }
 
 func (m *EriCacheDb) Insert(key utils.NodeKey, value utils.NodeValue12) error {
-	keyConc := utils.ArrayToScalar(key[:])
-	k := utils.ConvertBigIntToHex(keyConc)
+	k := utils.ArrayToHex(key[:])
 
-	vals := make([]*big.Int, 12)
-	copy(vals, value[:])
+	vConc := utils.ArrayToScalarBig(value[:])
+	v := utils.ArrayToHex(vConc.Bits())
 
-	vConc := utils.ArrayToScalarBig(vals)
-	v := utils.ConvertBigIntToHex(vConc)
-
-	return m.cacheTx.Put(TableSmt, []byte(k), []byte(v))
+	return m.cacheTx.Put(TableSmt, utils.UnsafeStringToBytes(k), utils.UnsafeStringToBytes(v))
 }
 
 func (m *EriCacheDb) Delete(key string) error {
@@ -166,16 +163,15 @@ func (m *EriCacheDb) Delete(key string) error {
 }
 
 func (m *EriCacheDb) DeleteByNodeKey(key utils.NodeKey) error {
-	keyConc := utils.ArrayToScalar(key[:])
-	k := utils.ConvertBigIntToHex(keyConc)
-	return m.cacheTx.Delete(TableSmt, []byte(k))
+	k := utils.ArrayToHex(key[:])
+	return m.cacheTx.Delete(TableSmt, utils.UnsafeStringToBytes(k))
 }
 
 func (m *EriCacheDb) GetAccountValue(key utils.NodeKey) (utils.NodeValue8, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 	k := utils.ConvertBigIntToHex(keyConc)
 
-	data, err := m.kvTxRo.GetOne(TableAccountValues, []byte(k))
+	data, err := m.kvTxRoSMT.GetOne(TableAccountValues, []byte(k))
 	if err != nil {
 		return utils.NodeValue8{}, err
 	}
@@ -218,7 +214,7 @@ func (m *EriCacheDb) DeleteKeySource(key utils.NodeKey) error {
 func (m *EriCacheDb) GetKeySource(key utils.NodeKey) ([]byte, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 
-	data, err := m.kvTxRo.GetOne(TableMetadata, keyConc.Bytes())
+	data, err := m.kvTxRoSMT.GetOne(TableMetadata, keyConc.Bytes())
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +242,7 @@ func (m *EriCacheDb) DeleteHashKey(key utils.NodeKey) error {
 func (m *EriCacheDb) GetHashKey(key utils.NodeKey) (utils.NodeKey, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 
-	data, err := m.kvTxRo.GetOne(TableHashKey, keyConc.Bytes())
+	data, err := m.kvTxRoSMT.GetOne(TableHashKey, keyConc.Bytes())
 	if err != nil {
 		return utils.NodeKey{}, err
 	}
@@ -291,7 +287,7 @@ func (m *EriCacheDb) AddCode(code []byte) error {
 }
 
 func (m *EriCacheDb) PrintDb() {
-	err := m.kvTxRo.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
+	err := m.kvTxRoSMT.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
 		println(string(k), string(v))
 		return nil
 	})
@@ -303,7 +299,7 @@ func (m *EriCacheDb) PrintDb() {
 func (m *EriCacheDb) GetDb() map[string][]string {
 	transformedDb := make(map[string][]string)
 
-	err := m.kvTxRo.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
+	err := m.kvTxRoSMT.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
 		hk := string(k)
 
 		vConc := utils.ConvertHexToBigInt(string(v))

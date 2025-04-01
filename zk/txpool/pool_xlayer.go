@@ -3,6 +3,7 @@ package txpool
 import (
 	"math/big"
 	"strings"
+	"sync/atomic"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/types"
@@ -47,10 +48,14 @@ type XLayerConfig struct {
 	EnableFreeGasList  bool
 	FreeGasFromNameMap map[string]string                 // map[from]projectName
 	FreeGasList        map[string]*ethconfig.FreeGasInfo // map[projectName]FreeGasInfo
+	// EnableTimsort is the switch to use timsort on the best slice of txpool
+	EnableTimsort bool
+	EnableNotify       bool
 }
 
 type GPCache interface {
 	GetLatest() (common.Hash, *big.Int)
+	GetLatestPriceReadOnly() *big.Int
 	SetLatest(hash common.Hash, price *big.Int)
 	GetLatestRawGP() *big.Int
 	SetLatestRawGP(rgp *big.Int)
@@ -105,15 +110,39 @@ func (p *TxPool) checkFreeGasExAddrXLayer(senderID uint64) bool {
 }
 
 func (p *TxPool) checkFreeGasAddrXLayer(senderID uint64, tx *types.TxSlot) (freeType int, gpMul uint64) {
+	addr := common.Address{}
+	freeType, gpMul = p.checkFreeGasSenderXLayer(senderID, &addr)
+	if addr == [20]byte{} {
+		return
+	}
+	if freeType != notFree {
+		return
+	}
+
+	return p.checkFreeGasTxXLayer(addr, tx)
+}
+
+func (p *TxPool) checkFreeGasSenderXLayer(senderID uint64, address *common.Address) (freeType int, gpMul uint64) {
 	addr, ok := p.senders.senderID2Addr[senderID]
 	if !ok {
 		return
 	}
+	*address = addr
 	// is claim tx
 	if p.apolloCfg.CheckFreeClaimAddr(p.xlayerCfg.FreeClaimGasAddrs, addr) {
 		return claim, p.xlayerCfg.GasPriceMultiple
 	}
 
+	// 	new bridge address
+	free := p.freeGasAddrs[addr.String()]
+	if free {
+		return freeByNonce, 1
+	}
+
+	return notFree, 0
+}
+
+func (p *TxPool) checkFreeGasTxXLayer(addr common.Address, tx *types.TxSlot) (freeType int, gpMul uint64) {
 	// specific project
 	if p.apolloCfg.GetEnableFreeGasList(p.xlayerCfg.EnableFreeGasList) {
 		fromToName, freeGpList := p.xlayerCfg.FreeGasFromNameMap, p.xlayerCfg.FreeGasList
@@ -124,12 +153,6 @@ func (p *TxPool) checkFreeGasAddrXLayer(senderID uint64, tx *types.TxSlot) (free
 
 			return specificProject, info.GasPriceMultiple
 		}
-	}
-
-	// 	new bridge address
-	free := p.freeGasAddrs[addr.String()]
-	if free {
-		return freeByNonce, 1
 	}
 
 	return notFree, 0
@@ -172,4 +195,14 @@ func (p *TxPool) setFreeGasList(freeGasList []ethconfig.FreeGasInfo) {
 		infoCopy := info
 		p.xlayerCfg.FreeGasList[info.Name] = &infoCopy
 	}
+}
+
+var requireTxPoolLock atomic.Bool
+
+func ArquireTxPoolLock(acquire bool) {
+	requireTxPoolLock.Swap(acquire)
+}
+
+func IsAcquireTxPoolLock() bool {
+	return requireTxPoolLock.Load()
 }

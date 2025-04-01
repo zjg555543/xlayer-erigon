@@ -17,9 +17,7 @@ import (
 )
 
 type Mapmutation struct {
-	puts          map[string]map[string][]byte // table -> key -> value ie. blocks -> hash -> blockBod
-	modifiedCache map[string]map[string][]byte
-
+	puts   map[string]map[string][]byte // table -> key -> value ie. blocks -> hash -> blockBod
 	db     kv.Tx
 	quit   <-chan struct{}
 	clean  func()
@@ -47,43 +45,22 @@ func NewHashBatch(tx kv.Tx, quit <-chan struct{}, tmpdir string, logger log.Logg
 	}
 
 	return &Mapmutation{
-		db:            tx,
-		puts:          make(map[string]map[string][]byte),
-		modifiedCache: make(map[string]map[string][]byte),
-		quit:          quit,
-		clean:         clean,
-		tmpdir:        tmpdir,
-		logger:        logger,
-	}
-}
-
-func NewHashBatchWithCache(tx kv.Tx, quit <-chan struct{}, tmpdir string, logger log.Logger, cache map[string]map[string][]byte) *Mapmutation {
-	clean := func() {}
-	if quit == nil {
-		ch := make(chan struct{})
-		clean = func() { close(ch) }
-		quit = ch
-	}
-
-	return &Mapmutation{
-		db:            tx,
-		puts:          cache,
-		modifiedCache: make(map[string]map[string][]byte),
-		quit:          quit,
-		clean:         clean,
-		tmpdir:        tmpdir,
-		logger:        logger,
+		db:     tx,
+		puts:   make(map[string]map[string][]byte),
+		quit:   quit,
+		clean:  clean,
+		tmpdir: tmpdir,
+		logger: logger,
 	}
 }
 
 func (m *Mapmutation) getMem(table string, key []byte) ([]byte, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if _, ok := m.puts[table]; !ok {
-		return nil, false
-	}
-	if value, ok := m.puts[table][*(*string)(unsafe.Pointer(&key))]; ok {
-		return value, ok
+	if ptm, ok := m.puts[table]; ok {
+		if value, ok := ptm[*(*string)(unsafe.Pointer(&key))]; ok {
+			return value, ok
+		}
 	}
 
 	return nil, false
@@ -169,13 +146,8 @@ func (m *Mapmutation) Put(table string, k, v []byte) error {
 	if _, ok := m.puts[table]; !ok {
 		m.puts[table] = make(map[string][]byte)
 	}
-	if _, ok := m.modifiedCache[table]; !ok {
-		m.modifiedCache[table] = make(map[string][]byte)
-	}
 
 	stringKey := string(k)
-
-	m.modifiedCache[table][stringKey] = v
 
 	var ok bool
 	if _, ok = m.puts[table][stringKey]; ok {
@@ -310,75 +282,17 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 	return nil
 }
 
-func (m *Mapmutation) SetCache(cache map[string]map[string][]byte) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.puts = cache
-}
-
-func (m *Mapmutation) RetrieveAndCleanSmtCache(smtTables []string) (map[string]map[string][]byte, map[string]map[string][]byte) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	targetCachedTable := make(map[string]map[string][]byte, len(smtTables))
-	deltaTargetCached := make(map[string]map[string][]byte, len(smtTables))
-
-	for _, table := range smtTables {
-		if bucket, ok := m.puts[table]; ok {
-			targetCachedTable[table] = bucket
-			for k, v := range bucket {
-				if v == nil || len(v) == 0 {
-					delete(bucket, k)
-				}
-			}
-
-			delete(m.puts, table)
-		}
-
-		if bucket, ok := m.modifiedCache[table]; ok {
-			deltaTargetCached[table] = bucket
-
-			delete(m.modifiedCache, table)
-		}
-	}
-
-	return targetCachedTable, deltaTargetCached
-}
-
-func (m *Mapmutation) ResetCacheContent() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// 重置原始 map
-	m.puts = m.modifiedCache
-	m.modifiedCache = map[string]map[string][]byte{}
-	m.size = 0
-	m.count = 0
-
-	for _, bucket := range m.puts {
-		m.count += uint64(len(bucket))
-		for k, v := range bucket {
-			m.size += len(k) + len(v)
-		}
-	}
-}
-
 func (m *Mapmutation) Flush(ctx context.Context, tx kv.RwTx) error {
 	if tx == nil {
 		return errors.New("rwTx needed")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if len(m.puts) == 0 {
-		return nil
-	}
 	if err := m.doCommit(tx); err != nil {
 		return err
 	}
 
 	m.puts = map[string]map[string][]byte{}
-	m.modifiedCache = map[string]map[string][]byte{}
 	m.size = 0
 	m.count = 0
 	return nil
@@ -392,7 +306,6 @@ func (m *Mapmutation) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.puts = map[string]map[string][]byte{}
-	m.modifiedCache = map[string]map[string][]byte{}
 	m.size = 0
 	m.count = 0
 	m.size = 0
@@ -408,4 +321,11 @@ func (m *Mapmutation) panicOnEmptyDB() {
 	if m.db == nil {
 		panic("Not implemented")
 	}
+}
+
+func (m *Mapmutation) SetCache(cache map[string]map[string][]byte) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.puts = cache
 }

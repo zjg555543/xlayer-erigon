@@ -388,10 +388,15 @@ type APIImpl struct {
 	DisableVirtualCounters        bool
 
 	// For X Layer
-	L2GasPricer     gasprice.L2GasPricer
-	EnableInnerTx   bool
-	PreRunList      map[common.Address]struct{}
-	preRunProcessor *PreRunProcessor
+	L2GasPricer        gasprice.L2GasPricer
+	EnableInnerTx      bool
+	PreRunList         map[common.Address]struct{}
+	preRunProcessor    *PreRunProcessor
+	BulkAddTxs         bool
+	BulkAddTxsSize     int
+	BulkAddTxsWaitTime time.Duration
+	txChan             chan txRequest
+	EnableNotify       bool
 }
 
 // NewEthAPI returns APIImpl instance
@@ -434,9 +439,14 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBacken
 		DisableVirtualCounters:        ethCfg.DisableVirtualCounters,
 
 		// For X Layer
-		L2GasPricer:   gasprice.NewL2GasPriceSuggester(context.Background(), ethCfg.GPO),
-		EnableInnerTx: ethCfg.XLayer.EnableInnerTx,
-		PreRunList:    ethCfg.XLayer.PreRunList,
+		L2GasPricer:        gasprice.NewL2GasPriceSuggester(context.Background(), ethCfg.GPO),
+		EnableInnerTx:      ethCfg.XLayer.EnableInnerTx,
+		PreRunList:         ethCfg.XLayer.PreRunList,
+		BulkAddTxs:         ethCfg.XLayer.BulkAddTxs,
+		BulkAddTxsSize:     ethCfg.XLayer.BulkAddTxsSize,
+		BulkAddTxsWaitTime: ethCfg.XLayer.BulkAddTxsWaitTime,
+		EnableNotify:       ethCfg.XLayer.EnableAddTxNotify,
+		txChan:             make(chan txRequest, 1000),
 	}
 
 	// For X Layer
@@ -454,7 +464,9 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBacken
 			}
 		}
 	})
-
+	if apii.BulkAddTxs {
+		go apii.worker()
+	}
 	return apii
 }
 
@@ -613,31 +625,37 @@ func newRPCRawTransactionFromBlockIndex(b *types.Block, index uint64) (hexutilit
 }
 
 type GasPriceCache struct {
-	latestPrice *big.Int
+	latestPrice atomic.Pointer[big.Int]
 	latestHash  common.Hash
 	mtx         sync.RWMutex
 	rawGPCache  *RawGPCache
 }
 
 func NewGasPriceCache() *GasPriceCache {
-	return &GasPriceCache{
-		latestPrice: big.NewInt(0),
+	gpCache := &GasPriceCache{
+		latestPrice: atomic.Pointer[big.Int]{},
 		latestHash:  common.Hash{},
 		rawGPCache:  NewRawGPCache(),
 	}
+	gpCache.latestPrice.Store(big.NewInt(0))
+	return gpCache
 }
 
 func (c *GasPriceCache) GetLatest() (common.Hash, *big.Int) {
 	price := new(big.Int)
 	c.mtx.RLock()
 	defer c.mtx.RUnlock()
-	price.Set(c.latestPrice) // deep copy
+	price.Set(c.latestPrice.Load()) // deep copy
 	return c.latestHash, price
+}
+
+func (c *GasPriceCache) GetLatestPriceReadOnly() *big.Int {
+	return c.latestPrice.Load()
 }
 
 func (c *GasPriceCache) SetLatest(hash common.Hash, price *big.Int) {
 	c.mtx.Lock()
-	c.latestPrice = price
+	c.latestPrice.Store(price)
 	c.latestHash = hash
 	c.mtx.Unlock()
 }
