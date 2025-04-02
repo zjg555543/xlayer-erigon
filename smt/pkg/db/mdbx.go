@@ -86,9 +86,6 @@ func NewRoEriDb(txsmt, txcdb kv.Getter) *EriRoDb {
 
 func (m *EriDb) OpenBatch(quitCh <-chan struct{}) {
 	batch := membatch.NewHashBatch(m.kvTxSMT, quitCh, "./tempdb", log.New())
-	defer func() {
-		batch.Close()
-	}()
 	m.tx = batch
 	m.kvTxRoSMT = batch
 }
