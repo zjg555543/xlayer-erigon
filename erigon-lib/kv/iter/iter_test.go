@@ -79,6 +79,8 @@ func TestUnion(t *testing.T) {
 	})
 }
 func TestUnionPairs(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	db := memdb.NewTestDB(t)
 	ctx := context.Background()
 	t.Run("simple", func(t *testing.T) {

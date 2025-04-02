@@ -260,6 +260,7 @@ func MockWithEverything(tb testing.TB, gspec *types.Genesis, key *ecdsa.PrivateK
 
 	logger := log.New()
 
+	kv.InitStandaloneSMT(true)
 	var db kv.RwDB
 	if tb != nil {
 		db = memdb.NewTestDB(tb)

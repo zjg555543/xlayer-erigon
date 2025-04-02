@@ -99,6 +99,8 @@ func TestEvictionInUnexpectedOrder(t *testing.T) {
 }
 
 func TestEviction(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	require, ctx := require.New(t), context.Background()
 	cfg := DefaultCoherentConfig
 	cfg.CacheSize = 21
@@ -160,6 +162,8 @@ func TestEviction(t *testing.T) {
 }
 
 func TestAPI(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	require := require.New(t)
 	c := New(DefaultCoherentConfig)
 	k1, k2 := [20]byte{1}, [20]byte{2}
@@ -350,6 +354,8 @@ func TestAPI(t *testing.T) {
 }
 
 func TestCode(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	require, ctx := require.New(t), context.Background()
 	c := New(DefaultCoherentConfig)
 	db := memdb.NewTestDB(t)

@@ -28,6 +28,8 @@ import (
 )
 
 func TestNonceFromAddress(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert, require := assert.New(t), require.New(t)
 	ch := make(chan types.Announcements, 100)
 	_, coreDB, _ := temporaltest.NewTestDB(t, datadir.New(t.TempDir()))
@@ -176,6 +178,8 @@ func TestNonceFromAddress(t *testing.T) {
 }
 
 func TestOnNewBlock(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	coreDB, db := memdb.NewTestDB(t), memdb.NewTestDB(t)

@@ -9,11 +9,14 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common/datadir"
 	downloadercfg2 "github.com/ledgerwatch/erigon-lib/downloader/downloadercfg"
 	"github.com/ledgerwatch/erigon-lib/downloader/snaptype"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
 	"github.com/stretchr/testify/require"
 )
 
 func TestChangeInfoHashOfSameFile(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	require := require.New(t)
 	dirs := datadir.New(t.TempDir())
 	cfg, err := downloadercfg2.New(dirs, "", lg.Info, 0, 0, 0, 0, 0, nil, nil, "testnet", false)

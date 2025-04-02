@@ -828,6 +828,7 @@ func testCloseWaitsAfterTxBegin(
 	txEndFunc func(kv.StatelessReadTx) error,
 ) {
 	t.Helper()
+	kv.InitStandaloneSMT(false)
 	db := NewMDBX(log.New()).InMem(t.TempDir()).MustOpen()
 	var txs []kv.StatelessReadTx
 	for i := 0; i < count; i++ {

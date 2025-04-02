@@ -32,6 +32,8 @@ func initializeDbNonDupSort(rwTx kv.RwTx) {
 }
 
 func TestPutAppendHas(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	_, rwTx := memdb.NewTestTx(t)
 
 	initializeDbNonDupSort(rwTx)

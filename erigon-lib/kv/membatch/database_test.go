@@ -36,6 +36,8 @@ var testBucket = kv.HashedAccounts
 var testValues = []string{"a", "1251", "\x00123\x00"}
 
 func TestPutGet(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	_, tx := memdb.NewTestTx(t)
 
 	//for _, k := range testValues {
@@ -96,6 +98,8 @@ func TestPutGet(t *testing.T) {
 }
 
 func TestNoPanicAfterDbClosed(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	db := memdb.NewTestDB(t)
 	tx, err := db.BeginRo(context.Background())
 	require.NoError(t, err)
@@ -133,6 +137,8 @@ func TestNoPanicAfterDbClosed(t *testing.T) {
 }
 
 func TestParallelPutGet(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	db := memdb.NewTestDB(t)
 
 	const n = 8

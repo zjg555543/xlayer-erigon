@@ -47,6 +47,8 @@ import (
 )
 
 func TestNonceFromAddress(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert, require := assert.New(t), require.New(t)
 	ch := make(chan types.Announcements, 100)
 	db, coreDB := memdb.NewTestPoolDB(t), memdb.NewTestDB(t)
@@ -167,6 +169,8 @@ func TestNonceFromAddress(t *testing.T) {
 }
 
 func TestReplaceWithHigherFee(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert, require := assert.New(t), require.New(t)
 	ch := make(chan types.Announcements, 100)
 	db, coreDB := memdb.NewTestPoolDB(t), memdb.NewTestDB(t)
@@ -284,6 +288,8 @@ func TestReplaceWithHigherFee(t *testing.T) {
 }
 
 func TestReverseNonces(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert, require := assert.New(t), require.New(t)
 	ch := make(chan types.Announcements, 100)
 	db, coreDB := memdb.NewTestPoolDB(t), memdb.NewTestDB(t)
@@ -411,6 +417,8 @@ func TestReverseNonces(t *testing.T) {
 // this is a workaround for cases when transactions are getting stuck for strange reasons
 // even though logs show they are broadcast
 func TestTxPoke(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert, require := assert.New(t), require.New(t)
 	ch := make(chan types.Announcements, 100)
 	db, coreDB := memdb.NewTestPoolDB(t), memdb.NewTestDB(t)
@@ -740,6 +748,8 @@ func TestShanghaiValidateTx(t *testing.T) {
 
 // Blob gas price bump + other requirements to replace existing txns in the pool
 func TestBlobTxReplacement(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert, require := assert.New(t), require.New(t)
 	ch := make(chan types.Announcements, 5)
 	db, coreDB := memdb.NewTestPoolDB(t), memdb.NewTestDB(t)
@@ -952,6 +962,8 @@ func makeBlobTx() types.TxSlot {
 }
 
 func TestDropRemoteAtNoGossip(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert, require := assert.New(t), require.New(t)
 	ch := make(chan types.Announcements, 100)
 	db, coreDB := memdb.NewTestPoolDB(t), memdb.NewTestDB(t)
@@ -1059,6 +1071,8 @@ func TestDropRemoteAtNoGossip(t *testing.T) {
 }
 
 func TestBlobSlots(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert, require := assert.New(t), require.New(t)
 	ch := make(chan types.Announcements, 5)
 	db, coreDB := memdb.NewTestPoolDB(t), memdb.NewTestDB(t)
@@ -1136,6 +1150,8 @@ func TestBlobSlots(t *testing.T) {
 }
 
 func TestGasLimitChanged(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert, require := assert.New(t), require.New(t)
 	ch := make(chan types.Announcements, 100)
 	db, coreDB := memdb.NewTestPoolDB(t), memdb.NewTestDB(t)

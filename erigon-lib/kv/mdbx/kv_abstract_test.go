@@ -39,6 +39,8 @@ import (
 )
 
 func TestSequence(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	if runtime.GOOS == "windows" {
 		t.Skip("fix me on win please")
 	}

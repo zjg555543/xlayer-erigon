@@ -104,6 +104,8 @@ func TestEmptyValueIsNotANil(t *testing.T) {
 }
 
 func TestEmptyKeyValue(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	logger := log.New()
 	_, tx := memdb.NewTestTx(t)
 	require := require.New(t)
@@ -188,6 +190,8 @@ func TestNextKeyErr(t *testing.T) {
 }
 
 func TestFileDataProviders(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	logger := log.New()
 	// test invariant when we go through files (> 1 buffer)
 	_, tx := memdb.NewTestTx(t)
@@ -222,6 +226,8 @@ func TestFileDataProviders(t *testing.T) {
 }
 
 func TestRAMDataProviders(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	logger := log.New()
 	// test invariant when we go through memory (1 buffer)
 	_, tx := memdb.NewTestTx(t)
@@ -242,6 +248,8 @@ func TestRAMDataProviders(t *testing.T) {
 }
 
 func TestTransformRAMOnly(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	logger := log.New()
 	// test invariant when we only have one buffer and it fits into RAM (exactly 1 buffer)
 	_, tx := memdb.NewTestTx(t)
@@ -265,6 +273,8 @@ func TestTransformRAMOnly(t *testing.T) {
 }
 
 func TestEmptySourceBucket(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	logger := log.New()
 	_, tx := memdb.NewTestTx(t)
 	sourceBucket := kv.ChaindataTables[0]
@@ -285,6 +295,8 @@ func TestEmptySourceBucket(t *testing.T) {
 }
 
 func TestTransformExtractStartKey(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	logger := log.New()
 	// test invariant when we only have one buffer and it fits into RAM (exactly 1 buffer)
 	_, tx := memdb.NewTestTx(t)
@@ -307,6 +319,8 @@ func TestTransformExtractStartKey(t *testing.T) {
 }
 
 func TestTransformThroughFiles(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	logger := log.New()
 	// test invariant when we go through files (> 1 buffer)
 	_, tx := memdb.NewTestTx(t)
@@ -331,6 +345,8 @@ func TestTransformThroughFiles(t *testing.T) {
 }
 
 func TestTransformDoubleOnExtract(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	logger := log.New()
 	// test invariant when extractFunc multiplies the data 2x
 	_, tx := memdb.NewTestTx(t)
@@ -353,6 +369,8 @@ func TestTransformDoubleOnExtract(t *testing.T) {
 }
 
 func TestTransformDoubleOnLoad(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	logger := log.New()
 	// test invariant when loadFunc multiplies the data 2x
 	_, tx := memdb.NewTestTx(t)

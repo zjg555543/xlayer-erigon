@@ -7,6 +7,7 @@ import (
 	"time"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/stretchr/testify/require"
 
@@ -24,6 +25,7 @@ func TestDbDataRetrieverGetBatchByNumber(t *testing.T) {
 		blocksInBatch = uint64(6)
 	)
 
+	kv.InitStandaloneSMT(false)
 	_, dbTx := memdb.NewTestTx(t)
 	require.NoError(t, hermez_db.CreateHermezBuckets(dbTx))
 	db := hermez_db.NewHermezDb(dbTx)
@@ -61,6 +63,8 @@ func TestDbDataRetrieverGetBatchByNumber(t *testing.T) {
 }
 
 func TestDbDataRetrieverGetBlockByNumber(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	t.Run("querying an existing block", func(t *testing.T) {
 		// arrange
 		_, tx := memdb.NewTestTx(t)
