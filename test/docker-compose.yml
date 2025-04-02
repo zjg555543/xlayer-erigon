@@ -18,7 +18,7 @@ services:
       zkProver -c /usr/src/app/config.json
 
   xlayer-executor-2:
-    container_name: xlayer-executor-1
+    container_name: xlayer-executor-2
     image: hermeznetwork/zkevm-prover:v9.0.0-RC3-fork.13
     platform: linux/amd64
     environment:
