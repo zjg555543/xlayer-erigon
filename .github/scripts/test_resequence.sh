@@ -114,18 +114,13 @@ set -e
 stop_cdk_erigon_sequencer
 
 AC_SPLIT=${1:-false}
-CONFIG_FILE="/etc/cdk-erigon/config.yaml"
 
 if [ "$AC_SPLIT" = "ac-split" ]; then
     echo "Will use ac-split"
-    printf "\n" >> "$CONFIG_FILE"
-    echo "zkevm.standalone-smt-db: true" >> "$CONFIG_FILE"
-    echo "zkevm.enable-async-commit: true" >> "$CONFIG_FILE"
+    kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 'printf "\n" >> /etc/cdk-erigon/config.yaml && echo "zkevm.standalone-smt-db: true" >> /etc/cdk-erigon/config.yaml && echo "zkevm.enable-async-commit: true" >> /etc/cdk-erigon/config.yaml'
 else
     echo "Will not use ac-split"
-    printf "\n" >> "$CONFIG_FILE"
-    echo "zkevm.standalone-smt-db: false" >> "$CONFIG_FILE"
-    echo "zkevm.enable-async-commit: false" >> "$CONFIG_FILE"
+    kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 'printf "\n" >> /etc/cdk-erigon/config.yaml && echo "zkevm.standalone-smt-db: false" >> /etc/cdk-erigon/config.yaml && echo "zkevm.enable-async-commit: false" >> /etc/cdk-erigon/config.yaml'
 fi
 
 echo "Copying and modifying config"
