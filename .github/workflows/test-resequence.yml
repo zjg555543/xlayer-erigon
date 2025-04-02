@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        ac-split: ["true", "false"]
+        ac-split: ["default", "ac-split"]
     steps:
       - name: Checkout cdk-erigon
         uses: actions/checkout@v4

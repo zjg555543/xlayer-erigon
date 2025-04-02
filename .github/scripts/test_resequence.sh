@@ -112,7 +112,8 @@ set -e
 stop_cdk_erigon_sequencer
 
 AC_SPLIT=${1:-false}
-if [ "$AC_SPLIT" = "true" ]; then
+if [ "$AC_SPLIT" = "ac-split" ]; then
+    echo "Will use ac-split"
     kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 'sed -i "$a zkevm.standalone-smt-db: true\nzkevm.enable-async-commit: true" /etc/cdk-erigon/config.yaml'
 fi
 

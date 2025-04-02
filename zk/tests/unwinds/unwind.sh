@@ -78,7 +78,9 @@ AC_SPLIT=${1:-false}
 
 CONFIG_FILE="zk/tests/unwinds/config/dynamic-integration8.yaml"
 
-if [ "$AC_SPLIT" = "true" ]; then
+if [ "$AC_SPLIT" = "ac-split" ]; then
+    echo "Will use ac-split"
+    echo -e "\n" >> "$CONFIG_FILE"
     echo "zkevm.standalone-smt-db: true" >> "$CONFIG_FILE"
     echo "zkevm.enable-async-commit: true" >> "$CONFIG_FILE"
 fi

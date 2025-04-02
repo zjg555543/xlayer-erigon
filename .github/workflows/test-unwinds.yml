@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        ac-split: ["true", "false"]
+        ac-split: ["default", "ac-split"]
 
     steps:
       - name: Checkout cdk-erigon
