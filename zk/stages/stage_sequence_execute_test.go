@@ -3,6 +3,7 @@ package stages
 import (
 	"context"
 	"math/big"
+	"runtime/debug"
 	"testing"
 	"time"
 
@@ -36,13 +37,27 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestSpawnSequencingStage(t *testing.T) {
-	// Arrange
-	ctx, db1, dbsmt, txPoolDb := context.Background(), memdb.NewTestDB(t), memdb.NewTestDB(t), memdb.NewTestDB(t)
+func runTestSpawnSequencingStage(t *testing.T, is_standalone_smt_db bool) {
+	kv.InitStandaloneSMT(is_standalone_smt_db)
+
+	ctx, db1, txPoolDb := context.Background(), memdb.NewTestDB(t), memdb.NewTestDB(t)
 	tx := memdb.BeginRw(t, db1)
 	err := hermez_db.CreateHermezBuckets(tx)
 	require.NoError(t, err)
-	err = db.CreateEriDbBuckets(tx)
+
+	var dbsmt kv.RwDB = nil
+	var txsmt kv.RwTx = tx
+	if is_standalone_smt_db {
+		dbsmt = memdb.NewTestDB(t)
+		txsmt, err = dbsmt.BeginRw(ctx)
+		require.NoError(t, err)
+	}
+	err = db.CreateSMTDbBuckets(txsmt)
+	if is_standalone_smt_db {
+		err = txsmt.Commit()
+		require.NoError(t, err)
+	}
+
 	require.NoError(t, err)
 
 	chainID := *uint256.NewInt(1)
@@ -156,6 +171,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 	cfg := SequenceBlockCfg{
 		dataStreamServer: dataStreamServerMock,
 		db:               db1,
+		dbsmt:            dbsmt,
 		zk:               zkCfg,
 		infoTreeUpdater:  updater,
 		txPool:           txPool,
@@ -170,6 +186,10 @@ func TestSpawnSequencingStage(t *testing.T) {
 
 	// Act
 	err = SpawnSequencingStage(s, u, ctx, cfg, historyCfg, quiet)
+	if err != nil {
+		t.Logf("Error: %v", err)
+		debug.PrintStack()
+	}
 	require.NoError(t, err)
 
 	// Assert
@@ -208,4 +228,12 @@ type MockDoneHook struct {
 
 func (m *MockDoneHook) AfterRun(tx kv.Tx, finishProgressBefore uint64, prevUnwindPoint *uint64) error {
 	return nil
+}
+
+func TestSpawnSequencingStageOneDB(t *testing.T) {
+	runTestSpawnSequencingStage(t, false)
+}
+
+func TestSpawnSequencingStageSplitDB(t *testing.T) {
+	runTestSpawnSequencingStage(t, true)
 }

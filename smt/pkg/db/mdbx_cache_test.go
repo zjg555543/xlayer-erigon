@@ -15,7 +15,7 @@ func initDB(t *testing.T) *EriCacheDb {
 	tx, _ := dbi.BeginRw(context.Background())
 	ctx := context.Background()
 	db := NewEriCacheDb(ctx, tx, nil)
-	err := CreateEriDbBuckets(tx)
+	err := CreateSMTDbBuckets(tx)
 	assert.NoError(t, err)
 	return db
 }
@@ -50,7 +50,7 @@ func TestEriCacheDbBatch(t *testing.T) {
 	dbi, _ := mdbx.NewTemporaryMdbx(context.Background(), t.TempDir())
 	tx, _ := dbi.BeginRw(context.Background())
 	db := NewEriDb(tx, nil)
-	err := CreateEriDbBuckets(tx)
+	err := CreateSMTDbBuckets(tx)
 	assert.NoError(t, err)
 
 	// The key and value we're going to test
@@ -106,7 +106,7 @@ func setupTestEriCacheDb(t *testing.T) (*EriCacheDb, *EriCacheDb) {
 	assert.NoError(t, err)
 	tx, err := dbi.BeginRw(context.Background())
 	assert.NoError(t, err)
-	err = CreateEriDbBuckets(tx)
+	err = CreateSMTDbBuckets(tx)
 	assert.NoError(t, err)
 	err = tx.Commit()
 	assert.NoError(t, err)

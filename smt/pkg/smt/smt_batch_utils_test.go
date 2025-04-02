@@ -61,14 +61,14 @@ func initDb(t *testing.T, dbPath string, standaloneSmtDb bool) (kv.RwDB, kv.RwTx
 		if err != nil {
 			t.Fatalf("Cannot create SMT db transaction")
 		}
-		err = db.CreateEriDbBuckets(txsmt)
+		err = db.CreateSMTDbBuckets(txsmt)
 		if err != nil {
 			t.Fatalf("Cannot create SMT db buckets")
 		}
 		eridb = db.NewEriDb(txsmt, dbTransaction)
 	}
 
-	db.CreateEriDbBuckets(dbTransaction)
+	db.CreateSMTDbBuckets(dbTransaction)
 	return database, dbTransaction, eridb
 }
 

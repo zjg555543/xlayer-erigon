@@ -322,7 +322,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		return nil, err
 	}
 	defer txsmt.Rollback()
-	if err := db.CreateEriDbBuckets(txsmt); err != nil {
+	if err := db.CreateSMTDbBuckets(txsmt); err != nil {
 		log.Error("Failed to CreateEriDbBuckets", "err", err)
 		return nil, err
 	}

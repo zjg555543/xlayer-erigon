@@ -50,7 +50,7 @@ type EriRoDb struct {
 	kvTxRoChainDB kv.Getter
 }
 
-func CreateEriDbBuckets(tx kv.RwTx) error {
+func CreateSMTDbBuckets(tx kv.RwTx) error {
 	for _, table := range HermezSmtTables {
 		err := tx.CreateBucket(table)
 		if err != nil {

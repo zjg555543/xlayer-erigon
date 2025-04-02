@@ -22,7 +22,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUnwindBatches(t *testing.T) {
+func runTestUnwindBatches(t *testing.T, is_standalone_smt_db bool) {
+	kv.InitStandaloneSMT(is_standalone_smt_db)
+
 	currentBlockNumber := 10
 	fullL2Blocks := createTestL2Blocks(t, currentBlockNumber)
 
@@ -44,7 +46,13 @@ func TestUnwindBatches(t *testing.T) {
 	err := hermez_db.CreateHermezBuckets(tx)
 	require.NoError(t, err)
 
-	err = db.CreateEriDbBuckets(tx)
+	var txsmt kv.RwTx = tx
+	if is_standalone_smt_db {
+		db2 := memdb.NewTestDB(t)
+		txsmt = memdb.BeginRw(t, db2)
+	}
+
+	err = db.CreateSMTDbBuckets(txsmt)
 	require.NoError(t, err)
 
 	dsClient := NewTestDatastreamClient(fullL2Blocks, gerUpdates)
@@ -114,6 +122,14 @@ func TestUnwindBatches(t *testing.T) {
 	}
 }
 
+func TestUnwindBatchesOneDB(t *testing.T) {
+	runTestUnwindBatches(t, false)
+}
+
+func TestUnwindBatchesSplitDB(t *testing.T) {
+	runTestUnwindBatches(t, true)
+}
+
 func TestFindCommonAncestor(t *testing.T) {
 	blocksCount := 40
 	l2Blocks := createTestL2Blocks(t, blocksCount)
@@ -163,6 +179,7 @@ func TestFindCommonAncestor(t *testing.T) {
 		},
 	}
 
+	kv.InitStandaloneSMT(false)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// ARRANGE
@@ -172,7 +189,7 @@ func TestFindCommonAncestor(t *testing.T) {
 			err := hermez_db.CreateHermezBuckets(tx)
 			require.NoError(t, err)
 
-			err = db.CreateEriDbBuckets(tx)
+			err = db.CreateSMTDbBuckets(tx)
 			require.NoError(t, err)
 
 			hermezDb := hermez_db.NewHermezDb(tx)

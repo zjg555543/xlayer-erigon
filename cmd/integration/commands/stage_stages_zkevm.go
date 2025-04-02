@@ -112,11 +112,11 @@ func unwindZk(ctx context.Context, db, dbsmt kv.RwDB) error {
 			return err
 		}
 		defer txsmt.Rollback()
-		if err := smtdb.CreateEriDbBuckets(txsmt); err != nil {
+		if err := smtdb.CreateSMTDbBuckets(txsmt); err != nil {
 			return err
 		}
 	} else {
-		if err := smtdb.CreateEriDbBuckets(tx); err != nil {
+		if err := smtdb.CreateSMTDbBuckets(tx); err != nil {
 			return err
 		}
 	}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -25,11 +26,12 @@ func TestSpawnStageDataStreamCatchup(t *testing.T) {
 	// Arrange
 	os.Setenv("CDK_ERIGON_SEQUENCER", "1")
 
+	kv.InitStandaloneSMT(false)
 	ctx, db1 := context.Background(), memdb.NewTestDB(t)
 	tx1 := memdb.BeginRw(t, db1)
 	err := hermez_db.CreateHermezBuckets(tx1)
 	require.NoError(t, err)
-	err = db.CreateEriDbBuckets(tx1)
+	err = db.CreateSMTDbBuckets(tx1)
 	require.NoError(t, err)
 
 	s := &stagedsync.StageState{ID: stages.DataStream, BlockNumber: 0}

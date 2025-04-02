@@ -9,6 +9,7 @@ import (
 	"github.com/iden3/go-iden3-crypto/keccak256"
 	ethereum "github.com/ledgerwatch/erigon"
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
@@ -27,12 +28,14 @@ import (
 )
 
 func TestSpawnL1InfoTreeStage(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	// arrange
 	ctx, db1 := context.Background(), memdb.NewTestDB(t)
 	tx := memdb.BeginRw(t, db1)
 	err := hermez_db.CreateHermezBuckets(tx)
 	require.NoError(t, err)
-	err = db.CreateEriDbBuckets(tx)
+	err = db.CreateSMTDbBuckets(tx)
 	require.NoError(t, err)
 
 	hDB := hermez_db.NewHermezDb(tx)
