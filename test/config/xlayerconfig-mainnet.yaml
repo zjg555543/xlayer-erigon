@@ -13,7 +13,7 @@ zkevm.l1-rpc-url: https://rpc.ankr.com/eth
 
 #debug.limit: 8554110
 
-zkevm.executor-urls: xlayer-executor:50071,xlayer-executor-2:50072,xlayer-executor-3:50073
+zkevm.executor-urls: xlayer-executor:50071,xlayer-executor-2:50071,xlayer-executor-3:50071
 zkevm.executor-strict: true
 zkevm.witness-full: false
 zkevm.executor-mock: false
