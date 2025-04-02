@@ -80,9 +80,14 @@ CONFIG_FILE="zk/tests/unwinds/config/dynamic-integration8.yaml"
 
 if [ "$AC_SPLIT" = "ac-split" ]; then
     echo "Will use ac-split"
-    echo -e "\n" >> "$CONFIG_FILE"
+    printf "\n" >> "$CONFIG_FILE"
     echo "zkevm.standalone-smt-db: true" >> "$CONFIG_FILE"
     echo "zkevm.enable-async-commit: true" >> "$CONFIG_FILE"
+else
+    echo "Will not use ac-split"
+    printf "\n" >> "$CONFIG_FILE"
+    echo "zkevm.standalone-smt-db: false" >> "$CONFIG_FILE"
+    echo "zkevm.enable-async-commit: false" >> "$CONFIG_FILE"
 fi
 
 # Run Erigon to first stop

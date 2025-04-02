@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e  # Exit immediately if a command exits with a non-zero status
+
 get_latest_l2_batch() {
     local latest_block
     latest_block=$(cast block latest --rpc-url "$(kurtosis port print cdk-v1 cdk-erigon-sequencer-001 rpc)" | grep "number" | awk '{print $2}')
@@ -112,9 +114,18 @@ set -e
 stop_cdk_erigon_sequencer
 
 AC_SPLIT=${1:-false}
+CONFIG_FILE="/etc/cdk-erigon/config.yaml"
+
 if [ "$AC_SPLIT" = "ac-split" ]; then
     echo "Will use ac-split"
-    kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 'sed -i "$a zkevm.standalone-smt-db: true\nzkevm.enable-async-commit: true" /etc/cdk-erigon/config.yaml'
+    printf "\n" >> "$CONFIG_FILE"
+    echo "zkevm.standalone-smt-db: true" >> "$CONFIG_FILE"
+    echo "zkevm.enable-async-commit: true" >> "$CONFIG_FILE"
+else
+    echo "Will not use ac-split"
+    printf "\n" >> "$CONFIG_FILE"
+    echo "zkevm.standalone-smt-db: false" >> "$CONFIG_FILE"
+    echo "zkevm.enable-async-commit: false" >> "$CONFIG_FILE"
 fi
 
 echo "Copying and modifying config"
