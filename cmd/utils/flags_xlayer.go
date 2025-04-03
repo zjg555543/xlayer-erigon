@@ -209,7 +209,6 @@ var (
 		Usage: "Method rate limit in requests per second, format: {\"method\":[\"method1\",\"method2\"],\"count\":1,\"bucket\":1}, eg. {\"methods\":[\"eth_call\",\"eth_blockNumber\"],\"count\":10,\"bucket\":1}",
 		Value: "",
 	}
-
 	PreRunAddressList = cli.StringFlag{
 		Name:  "zkevm.pre-run-address-list",
 		Usage: "Pre run address list while receiving a transaction",
@@ -289,6 +288,7 @@ var (
 		Usage: "Enable concurrent block info calculation",
 		Value: false,
 	}
+
 	EnableAsyncCommit = cli.BoolFlag{
 		Name:  "zkevm.enable-async-commit",
 		Usage: "Enable async smt commit feature",

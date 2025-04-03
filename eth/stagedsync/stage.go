@@ -46,6 +46,7 @@ type StageState struct {
 	ID          stages.SyncStage
 	BlockNumber uint64 // BlockNumber is the current block number of the stage at the beginning of the state execution.
 }
+
 func (s *StageState) GetSmtCache() map[string]map[string][]byte {
 	return s.state.GetSmtCache()
 }
