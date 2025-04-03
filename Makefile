@@ -141,6 +141,7 @@ COMMANDS += verkle
 COMMANDS += evm
 COMMANDS += sentinel
 COMMANDS += acl
+COMMANDS += smt-db-split
 
 # build each command using %.cmd rule
 $(COMMANDS): %: %.cmd
@@ -159,11 +160,11 @@ db-tools:
 	rm -rf vendor
 	@echo "Run \"$(GOBIN)/mdbx_stat -h\" to get info about mdbx db file."
 
-
 ## test-unwind:                       run the unwind tests
 test-unwind:
 	make cdk-erigon
-	./zk/tests/unwinds/unwind.sh
+	./zk/tests/unwinds/unwind.sh default
+	./zk/tests/unwinds/unwind.sh ac-split
 
 
 test-erigon-lib:
