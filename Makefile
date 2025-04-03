@@ -163,8 +163,8 @@ db-tools:
 ## test-unwind:                       run the unwind tests
 test-unwind:
 	make cdk-erigon
-	./zk/tests/unwinds/unwind.sh false
-	./zk/tests/unwinds/unwind.sh true
+	./zk/tests/unwinds/unwind.sh default
+	./zk/tests/unwinds/unwind.sh ac-split
 
 
 test-erigon-lib:
