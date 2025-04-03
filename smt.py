@@ -1,7 +1,6 @@
 import json
 import sys
 
-
 def strip_hex_prefix(hex_string):
     result = hex_string
     if hex_string.startswith('0x'):
