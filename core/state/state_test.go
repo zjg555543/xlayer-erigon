@@ -209,6 +209,8 @@ func (s *StateSuite) TestSnapshotEmpty(c *checker.C) {
 // use testing instead of checker because checker does not support
 // printing/logging in tests (-check.vv does not work)
 func TestSnapshot2(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	t.Parallel()
 	_, tx := memdb.NewTestTx(t)
 	w := NewPlainState(tx, 1, nil)

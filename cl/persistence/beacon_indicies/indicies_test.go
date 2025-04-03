@@ -13,6 +13,7 @@ import (
 )
 
 func setupTestDB(t *testing.T) kv.RwDB {
+	kv.InitStandaloneSMT(false)
 	// Create an in-memory SQLite DB for testing purposes
 	db := memdb.NewTestDB(t)
 	return db

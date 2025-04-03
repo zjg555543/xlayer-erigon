@@ -33,6 +33,7 @@ func genTestCallTraceSet(t *testing.T, tx kv.RwTx, to uint64) {
 }
 
 func TestCallTrace(t *testing.T) {
+	kv.InitStandaloneSMT(false)
 	logger := log.New()
 	ctx, require := context.Background(), require.New(t)
 	histV3, db, _ := temporaltest.NewTestDB(t, datadir.New(t.TempDir()))

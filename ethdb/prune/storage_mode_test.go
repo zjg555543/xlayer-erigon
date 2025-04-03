@@ -5,12 +5,15 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestSetStorageModeIfNotExist(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	_, tx := memdb.NewTestTx(t)
 	prune, err := Get(tx)
 	assert.NoError(t, err)

@@ -4,12 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/stretchr/testify/require"
 	_ "modernc.org/sqlite"
 )
 
 func TestDBConfig(t *testing.T) {
+	kv.InitStandaloneSMT(false)
 	db := memdb.NewTestDB(t)
 	defer db.Close()
 	tx, err := db.BeginRw(context.Background())

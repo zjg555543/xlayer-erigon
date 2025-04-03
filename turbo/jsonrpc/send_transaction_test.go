@@ -9,6 +9,7 @@ import (
 
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/txpool/txpoolcfg"
 	"github.com/ledgerwatch/erigon-lib/wrap"
 
@@ -77,6 +78,8 @@ func oneBlockStep(mockSentry *mock.MockSentry, require *require.Assertions, t *t
 }
 
 func TestSendRawTransaction(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	mockSentry, require := mock.MockWithTxPool(t), require.New(t)
 	logger := log.New()
 

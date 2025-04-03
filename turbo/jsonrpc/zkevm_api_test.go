@@ -15,6 +15,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/datadir"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/kvcache"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind/backends"
 	"github.com/ledgerwatch/erigon/core/rawdb"
@@ -918,6 +919,8 @@ var (
 )
 
 func TestGetFullBlockByNumber(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert := assert.New(t)
 	////////////////
 	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
@@ -1093,6 +1096,8 @@ func TestGetFullBlockByNumber(t *testing.T) {
 }
 
 func TestGetFullBlockByHash(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert := assert.New(t)
 	////////////////
 	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
@@ -1263,6 +1268,8 @@ func TestGetFullBlockByHash(t *testing.T) {
 }
 
 func TestGetForkId(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert := assert.New(t)
 
 	//////////////
@@ -1306,6 +1313,8 @@ func TestGetForkId(t *testing.T) {
 }
 
 func TestGetForkIdByBatchNumber(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert := assert.New(t)
 
 	//////////////
@@ -1353,6 +1362,8 @@ func TestGetForkIdByBatchNumber(t *testing.T) {
 }
 
 func TestGetForkById(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert := assert.New(t)
 
 	//////////////
@@ -1421,6 +1432,8 @@ func TestGetForkById(t *testing.T) {
 }
 
 func TestGetForks(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert := assert.New(t)
 
 	//////////////
@@ -1482,6 +1495,8 @@ func TestGetForks(t *testing.T) {
 }
 
 func TestGetRollupAddress(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert := assert.New(t)
 
 	//////////////
@@ -1520,6 +1535,8 @@ func TestGetRollupAddress(t *testing.T) {
 }
 
 func TestGetRollupManagerAddress(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	assert := assert.New(t)
 
 	//////////////

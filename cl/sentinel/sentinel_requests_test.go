@@ -32,6 +32,8 @@ import (
 )
 
 func loadChain(t *testing.T) (db kv.RwDB, blocks []*cltypes.SignedBeaconBlock, f afero.Fs, preState, postState *state.CachingBeaconState, reader *tests.MockBlockReader) {
+	kv.InitStandaloneSMT(false)
+
 	blocks, preState, postState = tests.GetPhase0Random()
 	db = memdb.NewTestDB(t)
 	reader = tests.LoadChain(blocks, postState, db, t)

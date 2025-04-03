@@ -33,6 +33,7 @@ import (
 )
 
 func TestIHCursor(t *testing.T) {
+	kv.InitStandaloneSMT(false)
 	db, tx := memdb.NewTestTx(t)
 	require := require.New(t)
 	hash := libcommon.HexToHash(fmt.Sprintf("%064d", 0))

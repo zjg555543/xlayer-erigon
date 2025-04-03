@@ -47,6 +47,8 @@ func NewMockService(db kv.RwDB) *Service {
 
 // TestWhitelistCheckpoint checks the checkpoint whitelist setter and getter functions.
 func TestWhitelistedCheckpoint(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	t.Parallel()
 
 	db := memdb.NewTestDB(t)
@@ -98,6 +100,8 @@ func TestWhitelistedCheckpoint(t *testing.T) {
 
 // TestMilestone checks the milestone whitelist setter and getter functions
 func TestMilestone(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	t.Parallel()
 
 	db := memdb.NewTestDB(t)
@@ -247,6 +251,8 @@ func TestMilestone(t *testing.T) {
 // TestIsValidChain checks the IsValidChain function in isolation
 // for different cases by providing a mock current header and chain
 func TestIsValidChain(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	t.Parallel()
 
 	db := memdb.NewTestDB(t)
@@ -462,6 +468,7 @@ func TestIsValidChain(t *testing.T) {
 }
 
 func TestPropertyBasedTestingMilestone(t *testing.T) {
+	kv.InitStandaloneSMT(false)
 	db := memdb.NewTestDB(t)
 
 	rapid.Check(t, func(t *rapid.T) {

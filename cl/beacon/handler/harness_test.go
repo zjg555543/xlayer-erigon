@@ -4,11 +4,13 @@ import (
 	_ "embed"
 	"testing"
 
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/cl/beacon/beacontest"
 	"github.com/ledgerwatch/erigon/cl/clparams"
 )
 
 func TestHarnessPhase0(t *testing.T) {
+	kv.InitStandaloneSMT(false)
 	beacontest.Execute(
 		append(
 			defaultHarnessOpts(harnessConfig{t: t, v: clparams.Phase0Version}),

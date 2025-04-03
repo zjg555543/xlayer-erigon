@@ -15,6 +15,7 @@ import (
 )
 
 func setupTestDB(t *testing.T) kv.RwDB {
+	kv.InitStandaloneSMT(false)
 	db := memdb.NewTestDB(t)
 	return db
 }

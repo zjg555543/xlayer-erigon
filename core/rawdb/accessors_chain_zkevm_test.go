@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/dbutils"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon/common/u256"
@@ -16,6 +17,8 @@ import (
 )
 
 func TestBodyStorageZkevm(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	_, tx := memdb.NewTestTx(t)
 	require := require.New(t)
 

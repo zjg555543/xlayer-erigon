@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/cl/antiquary/tests"
 	"github.com/ledgerwatch/erigon/cl/clparams"
 	"github.com/ledgerwatch/erigon/cl/phase1/execution_client"
@@ -15,7 +16,7 @@ import (
 )
 
 func TestBlockCollectorAccumulateAndFlush(t *testing.T) {
-
+	kv.InitStandaloneSMT(false)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	engine := execution_client.NewMockExecutionEngine(ctrl)

@@ -96,6 +96,7 @@ func (m *MockBlockReader) FrozenSlots() uint64 {
 }
 
 func LoadChain(blocks []*cltypes.SignedBeaconBlock, s *state.CachingBeaconState, db kv.RwDB, t *testing.T) *MockBlockReader {
+	kv.InitStandaloneSMT(false)
 	tx, err := db.BeginRw(context.Background())
 	require.NoError(t, err)
 	defer tx.Rollback()

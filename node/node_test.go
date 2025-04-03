@@ -139,6 +139,8 @@ func TestRegisterProtocols(t *testing.T) {
 
 // This test checks that open databases are closed with node.
 func TestNodeCloseClosesDB(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	if runtime.GOOS == "windows" {
 		t.Skip("fix me on win please")
 	}
@@ -167,6 +169,8 @@ func TestNodeCloseClosesDB(t *testing.T) {
 
 // This test checks that OpenDatabase can be used from within a Lifecycle Start method.
 func TestNodeOpenDatabaseFromLifecycleStart(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	if runtime.GOOS == "windows" {
 		t.Skip("fix me on win please")
 	}

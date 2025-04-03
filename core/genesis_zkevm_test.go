@@ -14,6 +14,8 @@ import (
 )
 
 func TestGenesisBlockHashesZkevm(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	check := func(network string) {
 		db := memdb.NewTestDB(t)
 		defer db.Close()
@@ -38,6 +40,8 @@ func TestGenesisBlockHashesZkevm(t *testing.T) {
 }
 
 func TestCommitGenesisIdempotency2(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	_, tx := memdb.NewTestTx(t)
 	genesis := core.GenesisBlockByChainName(networkname.HermezMainnetChainName)
 	logger := log.New()
