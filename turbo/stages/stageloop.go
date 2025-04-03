@@ -90,7 +90,8 @@ func AsyncFlushSmtData(ctx context.Context,
 
 		case <-ctx.Done():
 			logger.Info("AsyncFlushSmtData received stop signal", "reason", ctx.Err())
-			handleShutdown(ctx, s, config, &wg, workerPool, db, cache, logger)
+			// TODO: handle shutdown, Warning: This will cause a crash
+			// handleShutdown(ctx, s, config, &wg, workerPool, db, cache, logger)
 			return
 		}
 	}
