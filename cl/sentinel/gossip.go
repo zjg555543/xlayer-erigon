@@ -561,7 +561,9 @@ func (sub *GossipSubscription) OverwriteSubscriptionExpiry(expiry time.Time) {
 // calls the cancel func for the subscriber and closes the topic and sub
 func (s *GossipSubscription) Close() {
 	s.closeOnce.Do(func() {
-		close(s.stopCh)
+		if s.stopCh != nil {
+			close(s.stopCh)
+		}
 		if s.cf != nil {
 			s.cf()
 		}
