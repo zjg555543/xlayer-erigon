@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon/cl/antiquary/tests"
 	"github.com/ledgerwatch/erigon/cl/clparams"
@@ -55,6 +56,8 @@ func getTestBlobSidecars(blockHeader *cltypes.SignedBeaconBlockHeader) []*cltype
 }
 
 func TestBlobsByRangeHandler(t *testing.T) {
+	kv.InitStandaloneSMT(false)
+
 	ctx := context.Background()
 
 	listenAddrHost := "/ip4/127.0.0.1/tcp/6121"
