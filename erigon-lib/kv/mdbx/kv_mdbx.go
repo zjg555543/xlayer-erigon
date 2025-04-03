@@ -807,6 +807,9 @@ func (db *MdbxKV) trackTxEnd() {
 }
 
 func (db *MdbxKV) waitTxsAllDoneOnClose() {
+	db.txsAllDoneOnCloseCond.L.Lock()
+	defer db.txsAllDoneOnCloseCond.L.Unlock()
+
 	for !db.hasTxsAllDoneAndClosed() {
 		db.txsAllDoneOnCloseCond.Wait()
 	}
