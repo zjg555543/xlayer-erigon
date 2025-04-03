@@ -24,12 +24,12 @@ import (
 )
 
 func TestEmptyStageSync(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 	mock.Mock(t)
 }
 
 func TestHeaderStep(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 	m := mock.Mock(t)
 
 	chain, err := core.GenerateChain(m.ChainConfig, m.Genesis, m.Engine, m.DB, 100, func(i int, b *core.BlockGen) {
@@ -67,7 +67,7 @@ func TestHeaderStep(t *testing.T) {
 }
 
 func TestMineBlockWith1Tx(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 	t.Skip("revive me")
 	require, m := require.New(t), mock.Mock(t)
 
@@ -132,7 +132,7 @@ func TestMineBlockWith1Tx(t *testing.T) {
 }
 
 func TestReorg(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 	m := mock.Mock(t)
 
 	chain, err := core.GenerateChain(m.ChainConfig, m.Genesis, m.Engine, m.DB, 10, func(i int, b *core.BlockGen) {
@@ -308,7 +308,7 @@ func TestReorg(t *testing.T) {
 }
 
 func TestAnchorReplace(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 	m := mock.Mock(t)
 
 	chain, err := core.GenerateChain(m.ChainConfig, m.Genesis, m.Engine, m.DB, 10, func(i int, b *core.BlockGen) {
@@ -405,7 +405,7 @@ func TestAnchorReplace(t *testing.T) {
 }
 
 func TestAnchorReplace2(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 	m := mock.Mock(t)
 	chain, err := core.GenerateChain(m.ChainConfig, m.Genesis, m.Engine, m.DB, 10, func(i int, b *core.BlockGen) {
 		b.SetCoinbase(libcommon.Address{1})
