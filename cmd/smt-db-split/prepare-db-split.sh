@@ -53,6 +53,14 @@ mkdir -p $DST/seq/chaindata/
 mkdir -p $DST/seq/smt/
 cp mdbx_opts/opts_chaindb.json $DST/seq/chaindata/
 cp mdbx_opts/opts_smt.json $DST/seq/smt/
+
+if [ $# -gt 2 ]; then
+	if [ $3 == "-d" ]; then
+		echo "Dry-run done."
+		exit 0
+	fi
+fi
+
 $DBCPY -c $SRC/seq/chaindata/mdbx.dat $DST/seq/chaindata/mdbx.dat
 cp $DST/seq/chaindata/mdbx.dat $DST/seq/smt/mdbx.dat
 $DBSPLIT $DST/seq

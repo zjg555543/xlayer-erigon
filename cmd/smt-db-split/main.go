@@ -13,6 +13,8 @@ import (
 )
 
 func openDBWithOpts(optsFilePath string, dbPath string, log logv3.Logger, isSMT bool) (kv.RwDB, error) {
+	kv.InitStandaloneSMT(true)
+
 	ctx := context.Background()
 
 	jsonData, err := os.ReadFile(optsFilePath)
@@ -26,7 +28,7 @@ func openDBWithOpts(optsFilePath string, dbPath string, log logv3.Logger, isSMT 
 	}
 	newopts := opts.Path(dbPath)
 	newopts = newopts.Logger(log)
-	// mdbx.WithChaindataTables is the default table config. This is fine for smt db because Open return before this is called.
+	// mdbx.WithChaindataTables is the default table config. This is fine for smt db because Open returns before this is called.
 	newopts = newopts.WithTableCfg(mdbx.WithChaindataTables)
 	if isSMT {
 		newopts = newopts.Flags(func(flags uint) uint { return flags | mdbx2.WriteMap })
