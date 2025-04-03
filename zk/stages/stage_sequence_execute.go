@@ -494,10 +494,12 @@ func sequencingBatchStep(
 			txpool.ArquireTxPoolLock(false)
 
 			if len(batchState.blockState.transactionsForInclusion) == 0 {
-				pauseTime := time.Now()
-				time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool)
-				metrics.GetLogStatistics().CumulativeCounting(metrics.GetTxPauseCounter)
-				metrics.GetLogStatistics().CumulativeTiming(metrics.GetTxPauseTiming, time.Since(pauseTime))
+				if !batchState.isAnyRecovery() {
+					pauseTime := time.Now()
+					time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool)
+					metrics.GetLogStatistics().CumulativeCounting(metrics.GetTxPauseCounter)
+					metrics.GetLogStatistics().CumulativeTiming(metrics.GetTxPauseTiming, time.Since(pauseTime))
+				}
 			} else {
 				log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
 			}
