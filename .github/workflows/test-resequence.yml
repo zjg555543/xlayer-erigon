@@ -1,5 +1,6 @@
 name: Resequence test
 on:
+  workflow_call:
   push:
     branches:
       - dev
