@@ -1,5 +1,6 @@
 name: Unwinds tests
 on:
+  workflow_call:
   pull_request:
     branches:
       - dev
