@@ -7,11 +7,15 @@ on:
       - zkevm
       - zkevm-2.60
       - stable/**
+      - feature/v0.6.0
   workflow_dispatch:
 
 jobs:
   fixing-unwinds-tests:
     runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        split-db: ["default", "split-db"]
 
     steps:
       - name: Checkout cdk-erigon
@@ -21,7 +25,7 @@ jobs:
 
       - uses: actions/setup-go@v4
         with:
-          go-version: '1.21'
+          go-version: '1.24'
 
       - name: Install dependencies on Linux
         if: runner.os == 'Linux'
@@ -49,6 +53,6 @@ jobs:
         run: |
           cd ./cdk-erigon
           chmod +x ./zk/tests/unwinds/unwind.sh
-          ./zk/tests/unwinds/unwind.sh
+          ./zk/tests/unwinds/unwind.sh "${{ matrix.split-db }}"
 
   
