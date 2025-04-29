@@ -3,7 +3,7 @@ name: Schedule CI
 # Schedule daily runs at midnight SGT
 on:
   schedule:
-    - cron: '0 16 * * *'  # Runs at 00:00 SGT (16:00 UTC previous day)
+    - cron: '0 4 * * *'  # Runs at 12:00 SGT
 
 # Ensure only one workflow runs at a time
 concurrency:
