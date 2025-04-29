@@ -3,11 +3,11 @@ name: Schedule CI
 # Schedule daily runs at midnight SGT
 on:
   schedule:
-    - cron: '0 4 * * *'  # Runs at 12:00 SGT
+    - cron: '0 7 * * *'  # Runs at 12:00 SGT
 
 # Ensure only one workflow runs at a time
 concurrency:
-  group: ${{ github.ref }}
+  group: schedule-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
