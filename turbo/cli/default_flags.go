@@ -350,6 +350,8 @@ var DefaultFlags = []cli.Flag{
 	&utils.BulkAddTxsWaitTimeFlag,
 	&utils.EnableAddTxNotify,
 	&utils.SequencerSkipEmptyBlocks,
+	&utils.SequencerMaxBlockSealTime,
+	&utils.SequencerBatchCounterPercentage,
 
 	&utils.ACLPrintHistory,
 	&utils.InfoTreeUpdateInterval,
