@@ -1,0 +1,32 @@
+name: Schedule CI
+
+# Schedule daily runs at midnight SGT
+on:
+  schedule:
+    - cron: '0 7 * * *'  # Runs at 12:00 SGT
+
+# Ensure only one workflow runs at a time
+concurrency:
+  group: schedule-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Run the main CI workflow first
+  ci-zkevm:
+    name: Run CI Tests
+    uses: ./.github/workflows/ci_zkevm.yml
+    secrets: inherit
+
+  # Run resequence tests after CI
+  resequence:
+    name: Run Resequence Tests
+    needs: ci-zkevm
+    uses: ./.github/workflows/test-resequence.yml
+    secrets: inherit
+
+  # Run unwinds tests after CI
+  unwinds:
+    name: Run Unwinds Tests
+    needs: ci-zkevm
+    uses: ./.github/workflows/test-unwinds.yml
+    secrets: inherit
