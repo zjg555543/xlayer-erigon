@@ -1148,6 +1148,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			cfg.L1BlockRange,
 			cfg.L1QueryDelay,
 			cfg.L1HighestBlockType,
+			cfg.Zk.XLayer.GetLogsTimeout,
+			cfg.Zk.XLayer.GetLogsRetries,
 		)
 
 		backend.l1Syncer = syncer.NewL1Syncer(
@@ -1158,6 +1160,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			cfg.L1BlockRange,
 			cfg.L1QueryDelay,
 			cfg.L1HighestBlockType,
+			cfg.Zk.XLayer.GetLogsTimeout,
+			cfg.Zk.XLayer.GetLogsRetries,
 		)
 
 		log.Info("Rollup ID", "rollupId", cfg.L1RollupId)
@@ -1173,6 +1177,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			cfg.L1BlockRange,
 			cfg.L1QueryDelay,
 			cfg.L1HighestBlockType,
+			cfg.Zk.XLayer.GetLogsTimeout,
+			cfg.Zk.XLayer.GetLogsRetries,
 		)
 
 		l1InfoTreeUpdater := l1infotree.NewUpdater(cfg.Zk, l1InfoTreeSyncer)
@@ -1239,6 +1245,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				cfg.L1BlockRange,
 				cfg.L1QueryDelay,
 				cfg.L1HighestBlockType,
+				cfg.Zk.XLayer.GetLogsTimeout,
+				cfg.Zk.XLayer.GetLogsRetries,
 			)
 
 			backend.syncStages = stages2.NewSequencerZkStages(
@@ -1428,6 +1436,9 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 	if s.txPool2 != nil && gpCache != nil {
 		s.txPool2.SetGpCacheForXLayer(gpCache)
 	}
+
+	// For X Layer full trace monitor
+	utils.SetTraceLogConfig(config.Zk.XLayer.EnableTraceLog, config.Zk.XLayer.TraceLogPath)
 
 	if config.SilkwormRpcDaemon && httpRpcCfg.Enabled {
 		interface_log_settings := silkworm.RpcInterfaceLogSettings{

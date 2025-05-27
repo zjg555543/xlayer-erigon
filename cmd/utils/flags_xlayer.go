@@ -313,6 +313,26 @@ var (
 		Usage: "Percentage of the sequencer's counter to be used for the batch",
 		Value: 100,
 	}
+	GetLogsTimeout = cli.DurationFlag{
+		Name:  "zkevm.get-logs-timeout",
+		Usage: "Timeout for getLogs",
+		Value: 5 * time.Second,
+	}
+	GetLogsRetries = cli.IntFlag{
+		Name:  "zkevm.get-logs-retries",
+		Usage: "Retries for getLogs",
+		Value: 1,
+	}
+	TraceLogPath = cli.StringFlag{
+		Name:  "zkevm.trace-log-path",
+		Usage: "Path of trace.log for Monitoring Xlayer",
+		Value: "/home/erigon/data/logs/trace.log",
+	}
+	EnableTraceLog = cli.BoolFlag{
+		Name:  "zkevm.enable-trace-log",
+		Usage: "Enable full trace log",
+		Value: true,
+	}
 )
 
 func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {
