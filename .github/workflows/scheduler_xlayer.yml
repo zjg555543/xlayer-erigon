@@ -65,29 +65,3 @@ jobs:
     needs: ci-zkevm
     uses: ./.github/workflows/test-unwinds.yml
     secrets: inherit
-
-  notify-lark:
-    name: Notify Lark of Result
-    runs-on: ubuntu-latest
-    needs: [sync-upstream, ci-zkevm, resequence, unwinds]
-    if: always()  # Always run this job
-    steps:
-      - name: Determine Status and Send Notification
-        run: |
-          if [ "${{ needs.ci-zkevm.result }}" == "success" ] && \
-             [ "${{ needs.resequence.result }}" == "success" ] && \
-             [ "${{ needs.sync-upstream.result }}" == "success" ] && \
-             [ "${{ needs.unwinds.result }}" == "success" ]; then
-            STATUS="✅ All jobs succeeded"
-          else
-            STATUS="❌ One or more jobs failed"
-          fi
-
-          curl -X POST ${{ secrets.LARK_WEBHOOK_URL }} \
-            -H 'Content-Type: application/json' \
-            -d "{
-              \"msg_type\": \"text\",
-              \"content\": {
-                \"text\": \"${STATUS} in workflow: xlayer-erigon\nCheck: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
-              }
-            }"
