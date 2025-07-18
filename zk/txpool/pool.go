@@ -416,7 +416,11 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 			FreeGasExAddrs:       ethCfg.DeprecatedTxPool.FreeGasExAddrs,
 			FreeGasCountPerAddr:  ethCfg.DeprecatedTxPool.FreeGasCountPerAddr,
 			FreeGasLimit:         ethCfg.DeprecatedTxPool.FreeGasLimit,
-			EnableFreeGasList:    ethCfg.DeprecatedTxPool.EnableFreeGasList},
+			EnableFreeGasList:    ethCfg.DeprecatedTxPool.EnableFreeGasList,
+			// For OkPay
+			OkPaySenderAccountsList:    ethCfg.DeprecatedTxPool.OkPaySenderAccountsList,
+			OkPayBlockPriorityTxsLimit: ethCfg.DeprecatedTxPool.OkPayBlockPriorityTxsLimit,
+		},
 		freeGasAddrs: map[string]bool{},
 	}
 	tp.setFreeGasList(ethCfg.DeprecatedTxPool.FreeGasList)
@@ -1478,6 +1482,9 @@ func MainLoop(ctx context.Context, db kv.RwDB, coreDB kv.RoDB, p *TxPool, newTxs
 	purgeEvery := time.NewTicker(p.cfg.PurgeEvery)
 	defer purgeEvery.Stop()
 
+	// For Xlayer
+	go p.listenApollo(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -2528,10 +2535,6 @@ func (mt *metaTx) better(than *metaTx, pendingBaseFee uint64) bool {
 	thanDifference.SubUint64(&than.minFeeCap, pendingBaseFee)
 	if thanDifference.Sign() >= 0 {
 		thanSubPool |= EnoughFeeCapBlock
-	}
-
-	if mt.Tx.SenderID == than.Tx.SenderID && mt.Tx.Nonce != than.Tx.Nonce {
-		return mt.Tx.Nonce < than.Tx.Nonce
 	}
 
 	if subPool != thanSubPool {

@@ -17,6 +17,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk"
+	"github.com/ledgerwatch/erigon/zk/apollo"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/metrics"
@@ -112,17 +113,6 @@ func SpawnSequencingStage(
 			// enable split smt db
 			_ = s.FlushSmtCache(cfg.zk.XLayer.StandaloneSMTDatabase, false)
 		}()
-	} else {
-		// For X Layer, split db and ac
-		if !cfg.zk.XLayer.EnableAsyncCommit {
-			return err
-		}
-
-		s.FlushSmtCacheSignalInc()
-		go func() {
-			defer s.FlushSmtCacheDone()
-			s.ResetCurrentBatchCache(s.BlockNumber)
-		}()
 	}
 
 	return err
@@ -155,7 +145,26 @@ func sequencingBatchStep(
 	if err != nil {
 		return err
 	}
-	defer sdb.Rollback()
+	defer func() {
+		sdb.Rollback()
+
+		if err != nil {
+			if !cfg.zk.XLayer.EnableAsyncCommit {
+				return
+			}
+
+			executionAt, _ := s.ExecutionAt(sdb.tx)
+			if err != nil {
+				return
+			}
+
+			s.FlushSmtCacheSignalInc()
+			go func() {
+				defer s.FlushSmtCacheDone()
+				s.ResetCurrentBatchCache(executionAt + 1)
+			}()
+		}
+	}()
 
 	if sdb.supportAC {
 		// For X Layer, split db and ac
@@ -352,6 +361,7 @@ func sequencingBatchStep(
 	// For X Layer
 	var batchCloseReason metrics.BatchFinalizeType
 	batchStart := time.Now()
+	cfg.yieldSize = apollo.GetYieldSize(cfg.yieldSize)
 
 	// once the batch ticker has ticked we need a signal to close the batch after the next block is done
 	batchTimedOut := false
