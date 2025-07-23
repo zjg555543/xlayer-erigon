@@ -133,7 +133,6 @@ jobs:
           submodules: recursive
           fetch-depth: 0       # fetch full history, so the SHA is available
           path: bridge
-	  
       - name: Build docker image
         run: |
           cd bridge
