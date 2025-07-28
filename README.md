@@ -7,7 +7,6 @@ cdk-erigon is a fork of Erigon, currently in Alpha, optimized for syncing with t
 - **v1.1.x**: RPC (full support)
 - **v2.x.x**: Sequencer (full support)
 - **v3.x.x**: Erigon 3 based (snapshot support)
-
 ***
 
 ## Hardware requirements
