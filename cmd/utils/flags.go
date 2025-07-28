@@ -596,6 +596,16 @@ var (
 		Usage: "Reuse the L1 info index for resequencing",
 		Value: true,
 	}
+	SequencerResequenceInfoTreeOffset = cli.StringFlag{
+		Name:  "zkevm.sequencer-resequence-info-tree-offset",
+		Usage: "A tuple describing an info tree offset to use during resequencing.  Designed to recover from a skipped leaf in the info tree.  Format <index>:<offset>:<expected_ger_hash>",
+		Value: "",
+	}
+	AlwaysGenerateBatchL2Data = cli.BoolFlag{
+		Name:  "zkevm.always-generate-batch-l2-data",
+		Usage: "Always generate the batch L2 data",
+		Value: true,
+	}
 	ExecutorUrls = cli.StringFlag{
 		Name:  "zkevm.executor-urls",
 		Usage: "A comma separated list of grpc addresses that host executors",
@@ -843,6 +853,11 @@ var (
 		Name:  "zkevm.bad-tx-allowance",
 		Usage: "The maximum number of times a transaction that consumes too many counters to fit into a batch will be attempted before it is rejected outright by eth_sendRawTransaction",
 		Value: 2,
+	}
+	PessimisticForkNumber = cli.Uint64Flag{
+		Name:  "zkevm.pessimistic-fork-number",
+		Usage: "The fork number to use for networks launched as PP networks with no FEP history. Default 13.",
+		Value: 13,
 	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",

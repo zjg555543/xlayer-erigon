@@ -71,6 +71,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.WSEnabledFlag,
 	&utils.WSListenAddrFlag,
 	&utils.WSApiFlag,
+	&utils.WSSubscribeLogsChannelSize,
 	&utils.WsCompressionFlag,
 	&utils.HTTPTraceFlag,
 	&utils.HTTPDebugSingleFlag,
@@ -216,6 +217,8 @@ var DefaultFlags = []cli.Flag{
 	&utils.SequencerResequence,
 	&utils.SequencerResequenceStrict,
 	&utils.SequencerResequenceReuseL1InfoIndex,
+	&utils.SequencerResequenceInfoTreeOffset,
+	&utils.AlwaysGenerateBatchL2Data,
 	&utils.ExecutorUrls,
 	&utils.ExecutorStrictMode,
 	&utils.ExecutorRequestTimeout,
@@ -375,4 +378,5 @@ var DefaultFlags = []cli.Flag{
 
 	&utils.TraceLogPath,
 	&utils.EnableTraceLog,
+	&utils.PessimisticForkNumber,
 }

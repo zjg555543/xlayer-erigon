@@ -544,9 +544,13 @@ const (
 	BATCH_ENDS                        = "batch_ends"
 	WITNESS_CACHE                     = "witness_cache"
 	BAD_TX_HASHES                     = "bad_tx_hashes"
+	CONFIRMED_L1_INFO_TREE_UPDATE     = "confirmed_l1_info_tree_update"
+
 	//Diagnostics tables
 	DiagSystemInfo = "DiagSystemInfo"
 	DiagSyncStages = "DiagSyncStages"
+
+	PP_ROLLUP_TYPES = "pp_rollup_types" // rollup type id -> true
 )
 
 // Keys
@@ -786,6 +790,8 @@ var ChaindataTablesInitial = []string{
 	BATCH_ENDS,
 	WITNESS_CACHE,
 	BAD_TX_HASHES,
+	CONFIRMED_L1_INFO_TREE_UPDATE,
+	PP_ROLLUP_TYPES,
 }
 
 const (
