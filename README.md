@@ -9,7 +9,6 @@ cdk-erigon is a fork of Erigon, currently in Alpha, optimized for syncing with t
 - **v3.x.x**: Erigon 3 based (snapshot support)
 
 ***
-
 ## Hardware requirements
 
 * A Linux-based OS (e.g., Ubuntu Server 22.04 LTS).
