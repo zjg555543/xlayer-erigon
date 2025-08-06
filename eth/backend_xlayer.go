@@ -15,22 +15,25 @@ import (
 	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
-const (
-	MAINNET_ROLLUP_MGR                      = "0x0000000000000000000000000000000000000000"
-	MAINNET_CONFIG_CONTRACT_MANAGER_ADDRESS = "0x0000000000000000000000000000000000000000"
-	MAINNET_TARGET_ADDRESS                  = "0x000000000000000000000000000000000000dEaD"
-)
-const (
-	LOCAL_ROLLUP_MGR                      = "0xE96dBF374555C6993618906629988d39184716B3"
-	LOCAL_CONFIG_CONTRACT_MANAGER_ADDRESS = "0x1FdC273F90e3Eba11D2b20561F233B11424Fcfab"
-	LOCAL_TARGET_ADDRESS                  = "0x000000000000000000000000000000000000dEaD"
-)
+// Environment configuration for Token Manager validation
+type envConfig struct {
+	name             string
+	rollupMgr        string
+	tokenManagerAddr string
+	targetAddr       string
+}
 
-const (
-	TESTNET2_ROLLUP_MGR                      = "0x0000000000000000000000000000000000000000"
-	TESTNET2_CONFIG_CONTRACT_MANAGER_ADDRESS = "0x0000000000000000000000000000000000000000"
-	TESTNET2_TARGET_ADDRESS                  = "0x000000000000000000000000000000000000dEaD"
-)
+var environments = []envConfig{
+	{"mainnet", "0x0000000000000000000000000000000000000000", "0x0000000000000000000000000000000000000000", "0x000000000000000000000000000000000000dEaD"},
+	{"local", "0xE96dBF374555C6993618906629988d39184716B3", "0x1FdC273F90e3Eba11D2b20561F233B11424Fcfab", "0x000000000000000000000000000000000000dEaD"},
+	{"testnet2", "0x0000000000000000000000000000000000000000", "0x0000000000000000000000000000000000000000", "0x000000000000000000000000000000000000dEaD"},
+}
+
+// Addresses to ignore during validation (for testing purposes)
+var ignoreAddresses = []string{
+	"0xeE6F5B532b67ee594B372f7a3eBD276A45Ea6777", // for unwind test
+	"0x35b75f623311c87863Dd34a1fFE9A62a69fd4F87", // for unwind test
+}
 
 func (s *Ethereum) listenApollo(ctx context.Context, cfg *ethconfig.Config) {
 	stream := apollo.GetEthConfigStream()
@@ -96,20 +99,31 @@ func (s *Ethereum) updateAllL1Syncer(getLogsTimeout time.Duration, getLogsRetrie
 }
 
 func (s *Ethereum) forceCheckAddress(rollupMgr libcommon.Address) {
-	log.Info(fmt.Sprintf("Token Manager addresses, rollupMgr: %s, config_contract_manager_address: %s, target_address: %s", rollupMgr, vm.CONFIG_CONTRACT_MANAGER_ADDRESS, vm.TARGET_ADDRESS))
-	if rollupMgr == libcommon.HexToAddress(MAINNET_ROLLUP_MGR) {
-		if vm.CONFIG_CONTRACT_MANAGER_ADDRESS != libcommon.HexToAddress(MAINNET_CONFIG_CONTRACT_MANAGER_ADDRESS) || vm.TARGET_ADDRESS != libcommon.HexToAddress(MAINNET_TARGET_ADDRESS) {
-			panic("Token Manager addresses are not set correctly for mainnet")
+	log.Info(fmt.Sprintf("Token Manager validation - rollupMgr: %s, tokenManager: %s, target: %s",
+		rollupMgr, vm.CONFIG_CONTRACT_MANAGER_ADDRESS, vm.TARGET_ADDRESS))
+
+	// Check if address should be ignored
+	for _, ignoreAddr := range ignoreAddresses {
+		if rollupMgr == libcommon.HexToAddress(ignoreAddr) {
+			log.Info(fmt.Sprintf("Token Manager validation skipped for ignored address: %s", rollupMgr))
+			return
 		}
-	} else if rollupMgr == libcommon.HexToAddress(LOCAL_ROLLUP_MGR) {
-		if vm.CONFIG_CONTRACT_MANAGER_ADDRESS != libcommon.HexToAddress(LOCAL_CONFIG_CONTRACT_MANAGER_ADDRESS) || vm.TARGET_ADDRESS != libcommon.HexToAddress(LOCAL_TARGET_ADDRESS) {
-			panic("Token Manager addresses are not set correctly for local")
-		}
-	} else if rollupMgr == libcommon.HexToAddress(TESTNET2_ROLLUP_MGR) {
-		if vm.CONFIG_CONTRACT_MANAGER_ADDRESS != libcommon.HexToAddress(TESTNET2_CONFIG_CONTRACT_MANAGER_ADDRESS) || vm.TARGET_ADDRESS != libcommon.HexToAddress(TESTNET2_TARGET_ADDRESS) {
-			panic("Token Manager addresses are not set correctly for testnet2")
-		}
-	} else {
-		panic(fmt.Sprintf("Rollup Manager address is not set correctly: %s", rollupMgr))
 	}
+
+	// Find matching environment and validate
+	for _, env := range environments {
+		if rollupMgr == libcommon.HexToAddress(env.rollupMgr) {
+			expectedTokenMgr := libcommon.HexToAddress(env.tokenManagerAddr)
+			expectedTarget := libcommon.HexToAddress(env.targetAddr)
+
+			if vm.CONFIG_CONTRACT_MANAGER_ADDRESS != expectedTokenMgr || vm.TARGET_ADDRESS != expectedTarget {
+				panic(fmt.Sprintf("Token Manager addresses mismatch for %s environment", env.name))
+			}
+			log.Info(fmt.Sprintf("Token Manager validation passed for %s environment", env.name))
+			return
+		}
+	}
+
+	// Unknown rollupMgr address
+	panic(fmt.Sprintf("Unknown Rollup Manager address: %s", rollupMgr))
 }

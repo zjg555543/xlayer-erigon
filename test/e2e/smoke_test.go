@@ -191,7 +191,7 @@ func TestNewAccFreeGas(t *testing.T) {
 		},
 		GasPrice: uint256.MustFromBig(big.NewInt(0)),
 	}
-	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultL2NewAcc1PrivateKey, "0x"))
+	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultL2NewAcc2PrivateKey, "0x"))
 	require.NoError(t, err)
 	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), 1, 0)
 	signedTx, err := types.SignTx(tx, *signer, privateKey)
