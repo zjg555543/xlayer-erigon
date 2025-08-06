@@ -84,6 +84,7 @@ run: stop build-docker
 	$(DOCKER_COMPOSE) up -d xlayer-bridge-service
 	$(DOCKER_COMPOSE) up -d xlayer-bridge-ui
 	$(INIT_BRIDGE_ACCOUNT)
+	sleep 10
 	$(INIT_OKB_ISSUER)
 	
 	mkdir -p data/aggkit

@@ -407,12 +407,12 @@ help	:	Makefile
 build-docker: ## X Layer Builds a docker image with the binary (Local, default)
 	docker build -t cdk-erigon:local -f ./Dockerfile.local .
 
-build-testnet2: ## Build docker image for Testnet2
+build-testnet2: ## Build docker image for Testnet2, TODO
 	docker build -t cdk-erigon:testnet2 -f ./Dockerfile.local \
 		--build-arg TOKEN_MGR=0x1234567890123456789012345678901234567890 \
-		--build-arg TARGET_ADDR=0x000000000000000000000000000000000000dEaD .
+		--build-arg TARGET_ADDR=0x0000000000000000000000000000000000000000 .
 
-build-mainnet: ## Build docker image for Mainnet  
+build-mainnet: ## Build docker image for Mainnet, TODO
 	docker build -t cdk-erigon:mainnet -f ./Dockerfile.local \
 		--build-arg TOKEN_MGR=0x9876543210987654321098765432109876543210 \
-		--build-arg TARGET_ADDR=0x000000000000000000000000000000000000dEaD .
+		--build-arg TARGET_ADDR=0x0000000000000000000000000000000000000000 .

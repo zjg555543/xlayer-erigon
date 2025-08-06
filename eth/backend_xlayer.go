@@ -6,12 +6,30 @@ import (
 	"slices"
 	"time"
 
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
 	"github.com/ledgerwatch/erigon/zk/apollo"
 	"github.com/ledgerwatch/erigon/zkevm/log"
+)
+
+const (
+	MAINNET_ROLLUP_MGR                      = "0x0000000000000000000000000000000000000000"
+	MAINNET_CONFIG_CONTRACT_MANAGER_ADDRESS = "0x0000000000000000000000000000000000000000"
+	MAINNET_TARGET_ADDRESS                  = "0x000000000000000000000000000000000000dEaD"
+)
+const (
+	LOCAL_ROLLUP_MGR                      = "0xE96dBF374555C6993618906629988d39184716B3"
+	LOCAL_CONFIG_CONTRACT_MANAGER_ADDRESS = "0x1FdC273F90e3Eba11D2b20561F233B11424Fcfab"
+	LOCAL_TARGET_ADDRESS                  = "0x000000000000000000000000000000000000dEaD"
+)
+
+const (
+	TESTNET2_ROLLUP_MGR                      = "0x0000000000000000000000000000000000000000"
+	TESTNET2_CONFIG_CONTRACT_MANAGER_ADDRESS = "0x0000000000000000000000000000000000000000"
+	TESTNET2_TARGET_ADDRESS                  = "0x000000000000000000000000000000000000dEaD"
 )
 
 func (s *Ethereum) listenApollo(ctx context.Context, cfg *ethconfig.Config) {
@@ -74,5 +92,24 @@ func (s *Ethereum) updateAllL1Syncer(getLogsTimeout time.Duration, getLogsRetrie
 	}
 	if s.l1BlockSyncer != nil {
 		s.l1BlockSyncer.UpdateConfig(getLogsTimeout, getLogsRetries)
+	}
+}
+
+func (s *Ethereum) forceCheckAddress(rollupMgr libcommon.Address) {
+	log.Info(fmt.Sprintf("Token Manager addresses, rollupMgr: %s, config_contract_manager_address: %s, target_address: %s", rollupMgr, vm.CONFIG_CONTRACT_MANAGER_ADDRESS, vm.TARGET_ADDRESS))
+	if rollupMgr == libcommon.HexToAddress(MAINNET_ROLLUP_MGR) {
+		if vm.CONFIG_CONTRACT_MANAGER_ADDRESS != libcommon.HexToAddress(MAINNET_CONFIG_CONTRACT_MANAGER_ADDRESS) || vm.TARGET_ADDRESS != libcommon.HexToAddress(MAINNET_TARGET_ADDRESS) {
+			panic("Token Manager addresses are not set correctly for mainnet")
+		}
+	} else if rollupMgr == libcommon.HexToAddress(LOCAL_ROLLUP_MGR) {
+		if vm.CONFIG_CONTRACT_MANAGER_ADDRESS != libcommon.HexToAddress(LOCAL_CONFIG_CONTRACT_MANAGER_ADDRESS) || vm.TARGET_ADDRESS != libcommon.HexToAddress(LOCAL_TARGET_ADDRESS) {
+			panic("Token Manager addresses are not set correctly for local")
+		}
+	} else if rollupMgr == libcommon.HexToAddress(TESTNET2_ROLLUP_MGR) {
+		if vm.CONFIG_CONTRACT_MANAGER_ADDRESS != libcommon.HexToAddress(TESTNET2_CONFIG_CONTRACT_MANAGER_ADDRESS) || vm.TARGET_ADDRESS != libcommon.HexToAddress(TESTNET2_TARGET_ADDRESS) {
+			panic("Token Manager addresses are not set correctly for testnet2")
+		}
+	} else {
+		panic(fmt.Sprintf("Rollup Manager address is not set correctly: %s", rollupMgr))
 	}
 }
