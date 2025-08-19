@@ -445,6 +445,7 @@ var (
 	SyncSeqLogs = cli.BoolFlag{
 		Name:  "zkevm.sync-seq-logs",
 		Usage: "sync sequencer logs",
+	}
 	DynamicBlockGasLimit = cli.Uint64Flag{
 		Name:  "zkevm.dynamic-block-gas-limit",
 		Usage: "Dynamic block gas limit",
