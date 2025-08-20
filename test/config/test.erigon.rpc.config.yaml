@@ -98,3 +98,6 @@ realtime.kafka-sync-group-id: "xlayer-consumer-1"
 realtime.cache-dump-path: /home/erigon/data/cache
 
 zkevm.sync-seq-logs: true
+
+zkevm.data-stream-host: "localhost"
+zkevm.data-stream-port: 6900
