@@ -460,6 +460,7 @@ var (
 	SyncSeqLogs = cli.BoolFlag{
 		Name:  "zkevm.sync-seq-logs",
 		Usage: "sync sequencer logs",
+		Value: false,
 	}
 )
 
