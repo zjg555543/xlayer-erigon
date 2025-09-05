@@ -20,6 +20,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/metrics"
+	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	"github.com/ledgerwatch/erigon/zk/utils"
@@ -144,16 +145,17 @@ func sequencingBatchStep(
 	if err != nil {
 		return err
 	}
-	defer func() {
-		sdb.Rollback()
+	defer sdb.Rollback()
 
+	defer func() {
 		if err != nil {
+			log.Error("sequencingBatchStep", "error", err)
 			if !cfg.zk.XLayer.EnableAsyncCommit {
 				return
 			}
 
-			executionAt, _ := s.ExecutionAt(sdb.tx)
-			if err != nil {
+			executionAt, e := s.ExecutionAt(sdb.tx)
+			if e != nil {
 				return
 			}
 
@@ -360,7 +362,6 @@ func sequencingBatchStep(
 
 	// For X Layer
 	var batchCloseReason metrics.BatchFinalizeType
-	batchStart := time.Now()
 	cfg.yieldSize = apollo.GetYieldSize(cfg.yieldSize)
 
 	// once the batch ticker has ticked we need a signal to close the batch after the next block is done
@@ -443,6 +444,7 @@ BatchLoop:
 		if err = handleStateForNewBlockStarting(batchContext, ibs, blockNumber, batchState.batchNumber, header.Time, &parentRoot, l1TreeUpdate, shouldWriteGerToContract); err != nil {
 			return err
 		}
+		preExecuteChangeset := ibs.GenerateChangeset()
 
 		// start waiting for a new transaction to arrive
 		if !batchState.isAnyRecovery() {
@@ -459,8 +461,13 @@ BatchLoop:
 		processingTxTime := time.Now()
 
 		// For X Layer, realtime. Send kafka block header
-		if cfg.zk.XLayer.Realtime.Enable && cfg.kafkaNewBlockInfoChan != nil {
-			cfg.kafkaNewBlockInfoChan <- header
+		if cfg.zk.XLayer.Realtime.Enable && cfg.kafkaBlockInfoChan != nil {
+			cfg.kafkaBlockInfoChan <- &realtimeTypes.BlockInfo{
+				Header:    header,
+				TxCount:   -1,
+				Hash:      common.Hash{},
+				Changeset: preExecuteChangeset,
+			}
 		}
 
 	OuterLoopTransactions:
@@ -743,7 +750,6 @@ BatchLoop:
 
 		// For X Layer
 		metrics.GetLogStatistics().CumulativeTiming(metrics.ProcessingTxTiming, time.Since(processingTxTime))
-		metrics.SeqTxDuration.Observe(float64(time.Since(processingTxTime).Milliseconds()))
 
 		// we do not want to commit this block if it has no transactions and we detected an overflow - essentially the batch is too
 		// full to get any more transactions in it and we don't want to commit an empty block
@@ -766,11 +772,12 @@ BatchLoop:
 		}
 
 		// For X Layer, split db and ac
+		var postExecuteChangeset *realtimeTypes.Changeset
 		if batchContext.sdb.supportAC {
 			quit := batchContext.ctx.Done()
 			batchContext.sdb.eridb.OpenBatch(quit)           // do nothing...
 			batchContext.sdb.eridb.SetCache(s.GetSmtCache()) // will deep copy in internal function
-			if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress); err != nil {
+			if block, postExecuteChangeset, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress); err != nil {
 				batchContext.sdb.eridb.RollbackBatch()
 				return err
 			}
@@ -786,7 +793,7 @@ BatchLoop:
 		} else {
 			quit := batchContext.ctx.Done()
 			batchContext.sdb.eridb.OpenBatch(quit)
-			if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress); err != nil {
+			if block, postExecuteChangeset, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress); err != nil {
 				batchContext.sdb.eridb.RollbackBatch()
 				return err
 			}
@@ -800,7 +807,6 @@ BatchLoop:
 		// For X Layer
 		metrics.GetLogStatistics().CumulativeCounting(metrics.BlockCounter)
 		// Count successful transactions
-		metrics.SeqTxCount.Add(float64(len(batchState.blockState.builtBlockElements.transactions)))
 		metrics.GetLogStatistics().CumulativeValue(metrics.TxCounter, int64(len(batchState.blockState.builtBlockElements.transactions)))
 
 		// add a check to the verifier and also check for responses
@@ -845,7 +851,6 @@ BatchLoop:
 		if elapsedSeconds != 0 {
 			gasPerSecond = float64(block.GasUsed()) / elapsedSeconds
 		}
-		metrics.SeqBlockGasUsed.Set(float64(block.GasUsed()))
 
 		if gasPerSecond != 0 {
 			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions... (%d gas/s)", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions), int(gasPerSecond)), "info-tree-index", infoTreeIndexProgress, "taken", time.Since(startTime))
@@ -882,8 +887,14 @@ BatchLoop:
 			return err
 		}
 		// For X Layer, realtime
-		if cfg.zk.XLayer.Realtime.Enable && cfg.kafkaConfirmedBlockInfoChan != nil {
-			cfg.kafkaConfirmedBlockInfoChan <- block
+		if cfg.zk.XLayer.Realtime.Enable && cfg.kafkaBlockInfoChan != nil {
+			blockTxCount := int64(len(block.Transactions()))
+			cfg.kafkaBlockInfoChan <- &realtimeTypes.BlockInfo{
+				Header:    block.Header(),
+				TxCount:   blockTxCount,
+				Hash:      block.Hash(),
+				Changeset: postExecuteChangeset,
+			}
 		}
 
 		// lets commit everything after updateStreamAndCheckRollback no matter of its result unless
@@ -937,9 +948,6 @@ BatchLoop:
 	// For X Layer, split db and ac
 	err = sdb.Commit(s, blockNumber, false)
 	metrics.GetLogStatistics().CumulativeTiming(metrics.BatchCommitDBTiming, time.Since(startCommitTime))
-
-	batchTime := time.Since(batchStart)
-	metrics.BatchExecuteTime(string(batchCloseReason), batchTime)
 
 	return err
 }

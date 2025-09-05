@@ -145,7 +145,7 @@ func startBackgroundQuery(ctx context.Context, interval time.Duration) {
 
 	// Initial fetch for block gas limit
 	if gasLimit, err := getBlockGasLimitFromSequencer(sequencerRpcUrl); err != nil {
-		log.Error("failed to get block gas limit from sequencer (initial fetch)", "err", err)
+		log.Warn("failed to get block gas limit from sequencer (initial fetch)", "err", err)
 		newVal := uint64(1000_0000)
 		currentBlockGasLimit.Store(&newVal)
 	} else {
@@ -173,7 +173,7 @@ func startBackgroundQuery(ctx context.Context, interval time.Duration) {
 			// Also fetch block gas limit
 			gasLimit, err := getBlockGasLimitFromSequencer(sequencerRpcUrl)
 			if err != nil {
-				log.Error("failed to get block gas limit from sequencer", "err", err)
+				log.Warn("failed to get block gas limit from sequencer", "err", err)
 				// Don't continue here, we want to update batch number even if gas limit fails
 			} else {
 				newValGas := gasLimit
@@ -244,4 +244,9 @@ func GetCachedBlockGasLimit() (uint64, error) {
 		return 0, ErrBlockGasLimitUnavailable
 	}
 	return *valPtr, nil
+}
+
+// SetCachedBlockGasLimit sets the cached block gas limit (for testing purposes)
+func SetCachedBlockGasLimit(gasLimit uint64) {
+	currentBlockGasLimit.Store(&gasLimit)
 }
