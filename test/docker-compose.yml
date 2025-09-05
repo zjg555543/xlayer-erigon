@@ -595,7 +595,7 @@ services:
         fi &&
         prune-tool list-tables ./data &&
         echo 'Step 3: Pruning...' &&
-        prune-tool prune-chaindata ./data aggressive --keep-recent-batches=10 --yes &&
+        prune-tool prune-chaindata ./data aggressive --keep-recent-batches=1 --yes &&
         echo 'Step 4: Compacting chaindata...' &&
         prune-tool compact-db -source data/chaindata -in-place &&
         echo 'Step 5: Compacting SMT...' &&
