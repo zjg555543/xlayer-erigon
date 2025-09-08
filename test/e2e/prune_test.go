@@ -95,13 +95,38 @@ type BaselineData struct {
 func TestPruneRPC(t *testing.T) {
 	ctx := context.Background()
 
-	// Connect to L2 client
-	client, err := ethclient.Dial(operations.DefaultL2SeqNetworkURL)
-	require.NoError(t, err)
+	// Wait for RPC node to be ready before starting test
+	t.Log("⏳ Waiting for RPC node to be ready...")
+	maxWaitTime := 30 * time.Second
+	startTime := time.Now()
+
+	var client *ethclient.Client
+	var err error
+
+	for time.Since(startTime) < maxWaitTime {
+		client, err = ethclient.Dial(operations.DefaultL2NetworkURL)
+		if err == nil {
+			_, err = client.ChainID(ctx)
+			if err == nil {
+				t.Log("✅ RPC node is ready")
+				break
+			}
+			client.Close()
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	if err != nil {
+		t.Fatalf("RPC node not ready after %v: %v", maxWaitTime, err)
+	}
 	defer client.Close()
 
 	// Step 1: Generate test data
 	testData := generateTestData(t, ctx, client)
+
+	// Wait for transaction to be fully indexed
+	t.Log("⏳ Waiting for transaction to be indexed...")
+	time.Sleep(5 * time.Second)
 
 	// Step 2: Verify RPC interfaces work BEFORE pruning
 	baselineData := verifyRPCBeforePruning(t, ctx, client, testData)
@@ -111,7 +136,7 @@ func TestPruneRPC(t *testing.T) {
 
 	// Reconnect client after pruning
 	client.Close()
-	client, err = ethclient.Dial(operations.DefaultL2SeqNetworkURL)
+	client, err = ethclient.Dial(operations.DefaultL2NetworkURL)
 	require.NoError(t, err)
 	defer client.Close()
 
@@ -205,8 +230,21 @@ func generateTestData(t *testing.T, ctx context.Context, client *ethclient.Clien
 func verifyRPCBeforePruning(t *testing.T, ctx context.Context, client *ethclient.Client, testData *TestData) *BaselineData {
 	t.Log("✅ Step 2: Verifying RPC interfaces work BEFORE pruning...")
 
-	// Test eth_getTransactionByHash
-	tx, isPending, err := client.TransactionByHash(ctx, common.HexToHash(testData.TxHash))
+	// Test eth_getTransactionByHash with retry mechanism
+	var tx types.Transaction
+	var isPending bool
+	var err error
+
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		tx, isPending, err = client.TransactionByHash(ctx, common.HexToHash(testData.TxHash))
+		if err == nil {
+			break
+		}
+		t.Logf("⏳ Retry %d/%d: TransactionByHash failed: %v", i+1, maxRetries, err)
+		time.Sleep(2 * time.Second)
+	}
+
 	require.NoError(t, err)
 	require.False(t, isPending)
 	require.NotNil(t, tx)
@@ -731,7 +769,7 @@ func triggerDatabasePruning(t *testing.T) error {
 
 	for time.Since(startTime) < maxWaitTime {
 		// Try to connect to check if node is ready
-		client, err := ethclient.Dial(operations.DefaultL2SeqNetworkURL)
+		client, err := ethclient.Dial(operations.DefaultL2NetworkURL)
 		if err == nil {
 			_, err = client.ChainID(context.Background())
 			client.Close()

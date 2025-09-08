@@ -880,24 +880,36 @@ func TestDebugTraceRPC(t *testing.T) {
 
 	// Test debug_traceBlockByNumber
 	t.Run("DebugTraceBlockByNumber", func(t *testing.T) {
-		traceResult, err := operations.DebugTraceBlockByNumber(1) // Trace block #1
+		// Get latest block number first
+		client, err := ethclient.Dial(operations.DefaultL2NetworkURL)
 		require.NoError(t, err)
-		require.NotNil(t, traceResult, "Trace result should not be nil")
+		defer client.Close()
 
-		log.Infof("DebugTraceBlockByNumber result type: %T", traceResult)
+		latestBlock, err := client.BlockNumber(context.Background())
+		require.NoError(t, err)
+
+		if latestBlock > 0 {
+			traceResult, err := operations.DebugTraceBlockByNumber(latestBlock) // Trace latest block
+			require.NoError(t, err)
+			require.NotNil(t, traceResult, "Trace result should not be nil")
+
+			log.Infof("DebugTraceBlockByNumber result for block %d, type: %T", latestBlock, traceResult)
+		} else {
+			t.Skip("No blocks available to trace")
+		}
 	})
 
 	// Test debug_traceBatchByNumber
 	t.Run("DebugTraceBatchByNumber", func(t *testing.T) {
-		// Use batch number 1 to avoid issues with empty batches
-		if batchNum > 1 {
-			traceResult, err := operations.DebugTraceBatchByNumber(1)
+		// Use latest available batch number
+		if batchNum > 0 {
+			traceResult, err := operations.DebugTraceBatchByNumber(batchNum) // Use latest batch
 			require.NoError(t, err)
 			require.NotNil(t, traceResult, "Trace result should not be nil")
 
-			log.Infof("DebugTraceBatchByNumber result type: %T", traceResult)
+			log.Infof("DebugTraceBatchByNumber result for batch %d, type: %T", batchNum, traceResult)
 		} else {
-			t.Skip("Batch number too low, skipping test")
+			t.Skip("No batches available to trace")
 		}
 	})
 

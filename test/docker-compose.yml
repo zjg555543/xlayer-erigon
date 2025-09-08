@@ -611,7 +611,7 @@ services:
         else
           echo 'Step 5: SMT database not found (unified database mode), skipping SMT compaction'
         fi &&
-        echo 'Done! Pruning completed for XLAYER_DATA_DIR:' $XLAYER_DATA_DIR &&
+        echo 'Done! Pruning completed for directory:' $XLAYER_DATA_DIR &&
         prune-tool list-tables ./data
       "
     restart: "no"
