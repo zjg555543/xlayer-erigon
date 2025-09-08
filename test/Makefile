@@ -591,10 +591,34 @@ vmtouch-check:
 # Database pruning configuration
 XLAYER_DATA_DIR ?= ./data/seq
 
-.PHONY: prune
-prune: ## Prune xlayer-seq database
-	@echo "🗂️  Database Pruning Configuration:"
-	@echo "   Data Directory: $(XLAYER_DATA_DIR)"
-	@echo "   Target: Chaindata + SMT databases"
+.PHONY: prune-mainnet
+prune-mainnet: ## Prune mainnet RPC database (./mainnet/rpc)
+	@echo "🗂️  Pruning mainnet RPC Database:"
+	@echo "   Data Directory: ./mainnet/rpc"
+	XLAYER_DATA_DIR=./mainnet/rpc $(DOCKER_COMPOSE) up xlayer-prune
+
+.PHONY: prune-seq
+prune-seq: ## Prune sequencer database (./data/seq)
+	@echo "🗂️  Pruning Sequencer Database:"
+	@echo "   Data Directory: ./data/seq"
+	XLAYER_DATA_DIR=./data/seq $(DOCKER_COMPOSE) up xlayer-prune
+
+.PHONY: prune-rpc
+prune-rpc: ## Prune RPC database (./data/rpc)
+	@echo "🗂️  Pruning RPC Database:"
+	@echo "   Data Directory: ./data/rpc"
+	XLAYER_DATA_DIR=./data/rpc $(DOCKER_COMPOSE) up xlayer-prune
+
+.PHONY: prune-all
+prune: ## Prune both sequencer and RPC databases
+	@echo "🗂️  Pruning Local All Databases:"
+	@echo "   Sequencer: ./data/seq"
+	@echo "   RPC: ./data/rpc"
 	@echo ""
-	XLAYER_DATA_DIR=$(XLAYER_DATA_DIR) $(DOCKER_COMPOSE) up xlayer-prune
+	@echo "Step 1: Pruning Sequencer Database..."
+	XLAYER_DATA_DIR=./data/seq $(DOCKER_COMPOSE) up xlayer-prune
+	@echo ""
+	@echo "Step 2: Pruning RPC Database..."
+	XLAYER_DATA_DIR=./data/rpc $(DOCKER_COMPOSE) up xlayer-prune
+	@echo ""
+	@echo "✅ All databases pruned successfully!"

@@ -637,48 +637,92 @@ func triggerDatabasePruning(t *testing.T) error {
 	// Step 1: Stop the sequencer node
 	t.Log("Step 1: Stopping xlayer-seq node...")
 	t.Log("🔄 Executing stop command: docker compose stop xlayer-seq")
-	stopCmd := exec.Command("docker", "compose", "stop", "xlayer-seq")
-	stopCmd.Dir = ".." // Run from test parent directory
+	stopSeqCmd := exec.Command("docker", "compose", "stop", "xlayer-seq")
+	stopSeqCmd.Dir = ".." // Run from test parent directory
 
-	output, err := stopCmd.CombinedOutput()
+	output, err := stopSeqCmd.CombinedOutput()
 	// Always display the stop command output for detailed logging
-	t.Logf("📋 Stop command output:\n%s", string(output))
+	t.Logf("📋 Stop seq command output:\n%s", string(output))
 
 	if err != nil {
 		return fmt.Errorf("failed to stop xlayer-seq: %v", err)
 	}
-	t.Log("✅ Node stopped successfully")
+	t.Log("✅ Sequencer node stopped successfully")
+
+	// Wait 10 seconds before stopping RPC node
+	t.Log("⏳ Waiting 10 seconds...")
+	time.Sleep(10 * time.Second)
+
+	// Stop the RPC node
+	t.Log("🔄 Stopping xlayer-rpc node...")
+	stopRpcCmd := exec.Command("docker", "compose", "stop", "xlayer-rpc")
+	stopRpcCmd.Dir = ".." // Run from test parent directory
+
+	output, err = stopRpcCmd.CombinedOutput()
+	// Always display the stop command output for detailed logging
+	t.Logf("📋 Stop rpc command output:\n%s", string(output))
+
+	if err != nil {
+		return fmt.Errorf("failed to stop xlayer-rpc: %v", err)
+	}
+	t.Log("✅ RPC node stopped successfully")
 
 	// Step 2: Run database pruning
-	t.Log("Step 2: Running aggressive database pruning...")
-	pruneCmd := exec.Command("docker", "compose", "up", "xlayer-prune")
+	t.Log("Step 2: Running aggressive database pruning for both seq and rpc...")
+	pruneCmd := exec.Command("make", "prune")
 	pruneCmd.Dir = ".." // Run from test parent directory
 
-	t.Log("🔄 Executing prune command: docker compose up xlayer-prune")
+	t.Log("🔄 Executing prune command: make prune")
 	output, err = pruneCmd.CombinedOutput()
 
 	// Always display the prune command output for detailed logging
 	t.Logf("📋 Prune command output:\n%s", string(output))
 
+	// Check for both command execution error and container exit code
 	if err != nil {
 		return fmt.Errorf("failed to run database pruning: %v", err)
 	}
+
+	// Additional check for container exit code in output
+	if strings.Contains(string(output), "xlayer-prune exited with code") &&
+		!strings.Contains(string(output), "xlayer-prune exited with code 0") {
+		return fmt.Errorf("xlayer-prune container failed - check logs above for details")
+	}
+
 	t.Log("✅ Database pruning completed")
 
 	// Step 3: Restart the sequencer node
 	t.Log("Step 3: Restarting xlayer-seq node...")
 	t.Log("🔄 Executing start command: docker compose up -d xlayer-seq")
-	startCmd := exec.Command("docker", "compose", "up", "-d", "xlayer-seq")
-	startCmd.Dir = ".." // Run from test parent directory
+	startSeqCmd := exec.Command("docker", "compose", "up", "-d", "xlayer-seq")
+	startSeqCmd.Dir = ".." // Run from test parent directory
 
-	output, err = startCmd.CombinedOutput()
+	output, err = startSeqCmd.CombinedOutput()
 	// Always display the start command output for detailed logging
-	t.Logf("📋 Start command output:\n%s", string(output))
+	t.Logf("📋 Start seq command output:\n%s", string(output))
 
 	if err != nil {
 		return fmt.Errorf("failed to restart xlayer-seq: %v", err)
 	}
-	t.Log("✅ Node restarted successfully")
+	t.Log("✅ Sequencer node restarted successfully")
+
+	// Wait 10 seconds before starting RPC node
+	t.Log("⏳ Waiting 10 seconds before starting RPC node...")
+	time.Sleep(10 * time.Second)
+
+	// Start the RPC node
+	t.Log("🔄 Starting xlayer-rpc node...")
+	startRpcCmd := exec.Command("docker", "compose", "up", "-d", "xlayer-rpc")
+	startRpcCmd.Dir = ".." // Run from test parent directory
+
+	output, err = startRpcCmd.CombinedOutput()
+	// Always display the start command output for detailed logging
+	t.Logf("📋 Start rpc command output:\n%s", string(output))
+
+	if err != nil {
+		return fmt.Errorf("failed to start xlayer-rpc: %v", err)
+	}
+	t.Log("✅ RPC node started successfully")
 
 	// Step 4: Wait for node to be ready
 	t.Log("Step 4: Waiting for node to be ready...")

@@ -597,11 +597,21 @@ services:
         prune-tool list-tables ./data &&
         echo 'Step 2: Pruning...' &&
         prune-tool prune-chaindata ./data aggressive --keep-recent-batches=1 --yes &&
-        # echo 'Step 3: Compacting chaindata...' &&
-        # prune-tool compact-db -source data/chaindata -in-place &&
-        # echo 'Step 4: Compacting SMT...' &&
-        # prune-tool compact-db -source data/smt -in-place -type smt &&
-        echo 'Step 5: Done! &&
-        prune-tool list-tables ./data'
+        prune-tool list-tables ./data &&
+        echo 'Step 3: Compacting chaindata...' &&
+        mdbx_copy -c ./data/chaindata/mdbx.dat ./data/chaindata/mdbx.dat.new &&
+        rm -rf ./data/chaindata/mdbx.dat &&
+        mv ./data/chaindata/mdbx.dat.new ./data/chaindata/mdbx.dat &&
+        echo 'Step 4: Compacting SMT...' &&
+        if [ -f ./data/smt/mdbx.dat ]; then
+          echo 'Step 5: Compacting SMT database...' &&
+          mdbx_copy -c ./data/smt/mdbx.dat ./data/smt/mdbx.dat.new &&
+          rm -rf ./data/smt/mdbx.dat &&
+          mv ./data/smt/mdbx.dat.new ./data/smt/mdbx.dat
+        else
+          echo 'Step 5: SMT database not found (unified database mode), skipping SMT compaction'
+        fi &&
+        echo 'Done! Pruning completed for XLAYER_DATA_DIR:' $XLAYER_DATA_DIR &&
+        prune-tool list-tables ./data
       "
     restart: "no"
