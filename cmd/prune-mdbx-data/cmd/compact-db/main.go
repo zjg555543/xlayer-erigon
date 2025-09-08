@@ -579,7 +579,7 @@ func manualSmtCopy(ctx context.Context, src kv.RoDB, dst kv.RwDB, tables []strin
 				return fmt.Errorf("failed to read from source table %s: %w", tableName, err)
 			}
 
-			if err = dstCursor.Put(k, v); err != nil {
+			if err = dstCursor.Append(k, v); err != nil {
 				dstTx.Rollback()
 				return fmt.Errorf("failed to write to destination table %s: %w", tableName, err)
 			}
