@@ -586,20 +586,22 @@ services:
     working_dir: /home/erigon
     command: >
       sh -c "
-        echo 'Step 1: Checking LOCK...' &&
+        echo 'Checking LOCK...' &&
         if flock -n ./data/LOCK echo 'OK' 2>/dev/null; then
-          echo 'Step 2: Listing tables...'
+          echo 'Checking LOCK OK'
         else
           echo 'ERROR: Node running! Stop xlayer-seq first'
           exit 1
         fi &&
+        echo 'Step 1: Listing tables...' &&
         prune-tool list-tables ./data &&
-        echo 'Step 3: Pruning...' &&
+        echo 'Step 2: Pruning...' &&
         prune-tool prune-chaindata ./data aggressive --keep-recent-batches=1 --yes &&
-        echo 'Step 4: Compacting chaindata...' &&
-        prune-tool compact-db -source data/chaindata -in-place &&
-        echo 'Step 5: Compacting SMT...' &&
-        prune-tool compact-db -source data/smt -in-place -type smt &&
-        echo 'Step 6: Done!'
+        # echo 'Step 3: Compacting chaindata...' &&
+        # prune-tool compact-db -source data/chaindata -in-place &&
+        # echo 'Step 4: Compacting SMT...' &&
+        # prune-tool compact-db -source data/smt -in-place -type smt &&
+        echo 'Step 5: Done! &&
+        prune-tool list-tables ./data'
       "
     restart: "no"
