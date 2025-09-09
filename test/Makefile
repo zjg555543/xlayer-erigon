@@ -598,18 +598,6 @@ prune-mainnet: ## Prune mainnet RPC database (./mainnet/rpc)
 	@echo "   Data Directory: ./mainnet/rpc"
 	XLAYER_DATA_DIR=./mainnet/rpc $(DOCKER_COMPOSE) up xlayer-prune
 
-.PHONY: prune-seq
-prune-seq: ## Prune sequencer database (./data/seq)
-	@echo "🗂️  Pruning Sequencer Database:"
-	@echo "   Data Directory: ./data/seq"
-	XLAYER_DATA_DIR=./data/seq $(DOCKER_COMPOSE) up xlayer-prune
-
-.PHONY: prune-rpc
-prune-rpc: ## Prune RPC database (./data/rpc)
-	@echo "🗂️  Pruning RPC Database:"
-	@echo "   Data Directory: ./data/rpc"
-	XLAYER_DATA_DIR=./data/rpc $(DOCKER_COMPOSE) up xlayer-prune
-
 .PHONY: prune-all
 prune: ## Prune both sequencer and RPC databases
 	@echo "🗂️  Pruning Local All Databases:"
@@ -623,3 +611,10 @@ prune: ## Prune both sequencer and RPC databases
 	XLAYER_DATA_DIR=./data/rpc $(DOCKER_COMPOSE) up xlayer-prune
 	@echo ""
 	@echo "✅ All databases pruned successfully!"
+
+
+.PHONY: prune-mainnet-list-tables
+prune-mainnet-list-tables:
+	@echo "🗂️  Pruning List Tables:"
+	@echo "   Data Directory: ./mainnet/rpc"
+	XLAYER_DATA_DIR=./mainnet/rpc $(DOCKER_COMPOSE) up xlayer-prune-list-tables

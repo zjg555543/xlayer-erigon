@@ -615,3 +615,22 @@ services:
         prune-tool list-tables ./data
       "
     restart: "no"
+
+  xlayer-prune-list-tables:
+    container_name: xlayer-prune
+    image: cdk-erigon
+    volumes:
+      - ${XLAYER_DATA_DIR:-./data/seq/}:/home/erigon/data/
+    working_dir: /home/erigon
+    command: >
+      sh -c "
+        echo 'Checking LOCK...' &&
+        if flock -n ./data/LOCK echo 'OK' 2>/dev/null; then
+          echo 'Checking LOCK OK'
+        else
+          echo 'ERROR: Node running! Stop xlayer-seq first'
+          exit 1
+        fi &&
+        prune-tool list-tables ./data
+      "
+    restart: "no"
