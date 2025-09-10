@@ -5,77 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
-	"syscall"
 	"time"
 
 	"github.com/c2h5oh/datasize"
-	"github.com/erigontech/mdbx-go/mdbx"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/backup"
 	mdbx2 "github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	logv3 "github.com/ledgerwatch/log/v3"
-	"golang.org/x/sync/semaphore"
 )
-
-// Define local table configurations to avoid modifying erigon-lib
-var localChaindataTablesCfg = kv.TableCfg{}
-var localSmtTablesCfg = kv.TableCfg{}
-
-// SMT tables - ONLY the 5 pure SMT tables that actually exist in SMT database
-var smtTableNames = []string{
-	"HermezSmt",
-	"HermezSmtStats",
-	"HermezSmtAccountValues",
-	"HermezSmtMetadata",
-	"HermezSmtHashKey",
-}
-
-func getTableCfgForLabel(label kv.Label) kv.TableCfg {
-	if label == kv.SmtDB {
-		// Initialize SMT table config if needed
-		if len(localSmtTablesCfg) == 0 {
-			localSmtTablesCfg = kv.TableCfg{}
-
-			// Add deprecated chaindata tables (as expected by erigon-lib)
-			for name, cfg := range kv.ChaindataTablesCfg {
-				tmp := cfg
-				tmp.IsDeprecated = true // Mark chaindata tables as deprecated in SMT DB
-				localSmtTablesCfg[name] = tmp
-			}
-
-			// Add NON-deprecated SMT tables
-			for _, tableName := range smtTableNames {
-				localSmtTablesCfg[tableName] = kv.TableCfgItem{
-					Flags:        kv.Default,
-					IsDeprecated: false, // CRITICAL: SMT tables must not be deprecated
-				}
-			}
-		}
-		return localSmtTablesCfg
-	}
-
-	// For chaindata, build a clean config without SMT tables
-	if len(localChaindataTablesCfg) == 0 {
-		localChaindataTablesCfg = kv.TableCfg{}
-
-		// Create a set of SMT table names for fast lookup
-		smtTablesSet := make(map[string]bool)
-		for _, tableName := range smtTableNames {
-			smtTablesSet[tableName] = true
-		}
-
-		// Copy all non-SMT tables from the global config
-		for name, cfg := range kv.ChaindataTablesCfg {
-			if !smtTablesSet[name] {
-				localChaindataTablesCfg[name] = cfg
-			}
-		}
-	}
-
-	return localChaindataTablesCfg
-}
 
 func main() {
 	log := logv3.New()
@@ -88,69 +25,62 @@ func main() {
 		dryRun       = flag.Bool("dry-run", false, "Only show space analysis without compacting")
 		inPlace      = flag.Bool("in-place", false, "Compact database in-place (replaces original)")
 		createBackup = flag.Bool("backup", false, "Create backup before in-place replacement (default: false)")
+		splitDB      = flag.Bool("split-db", false, "Enable if using split database (separate smt folder)")
 	)
 	flag.Parse()
 
 	if *sourceDBPath == "" || (!*inPlace && *outputPath == "" && !*dryRun) {
-		fmt.Println("Usage: compact-db -source <source_db_path> [-output <output_path>] [-type chaindata|smt] [-dry-run] [-in-place] [-backup]")
+		fmt.Println("Usage: compact-db -source <source_db_path> [-output <output_path>] [-type chaindata|smt] [-split-db] [-dry-run] [-in-place] [-backup]")
 		fmt.Println("\nModes:")
 		fmt.Println("  1. Copy mode (default): -source <path> -output <new_path>")
 		fmt.Println("  2. In-place mode:       -source <path> -in-place [-backup]")
 		fmt.Println("\nOptions:")
-		fmt.Println("  -backup:  Create .backup before in-place replacement (default: false)")
-		fmt.Println("  -dry-run: Analyze potential space savings only")
+		fmt.Println("  -type:          Database type to compact ('chaindata' or 'smt', default: 'chaindata')")
+		fmt.Println("  -split-db: Enable if using split database (SMT data stored in separate 'smt' folder)")
+		fmt.Println("  -backup:         Create .backup before in-place replacement (default: false)")
+		fmt.Println("  -dry-run:        Analyze potential space savings only")
+		fmt.Println("\nDatabase Configuration:")
+		fmt.Println("  • Without -split-db: Both chaindata and SMT tables are in 'chaindata' folder")
+		fmt.Println("  • With -split-db:    SMT tables are in separate 'smt' folder")
 		fmt.Println("\nExamples:")
-		fmt.Println("  # Copy mode - create new compacted database")
+		fmt.Println("  # Compact integrated database (chaindata + smt in same DB)")
 		fmt.Println("  compact-db -source /path/to/seq/chaindata -output /path/to/seq/chaindata.compact")
-		fmt.Println("  # In-place mode - replace original database directly (⚠️ no backup)")
-		fmt.Println("  compact-db -source /path/to/seq/chaindata -in-place")
-		fmt.Println("  # In-place mode with backup - safer but uses more space")
+		fmt.Println("  # Compact split SMT database")
+		fmt.Println("  compact-db -source /path/to/seq/smt -type smt -split-db -in-place")
+		fmt.Println("  # In-place mode with backup")
 		fmt.Println("  compact-db -source /path/to/seq/chaindata -in-place -backup")
-		fmt.Println("  # Compact SMT database in-place")
-		fmt.Println("  compact-db -source /path/to/seq/smt -in-place -type smt")
 		fmt.Println("  # Dry run to analyze potential space savings")
 		fmt.Println("  compact-db -source /path/to/seq/chaindata -dry-run")
 		os.Exit(1)
 	}
 
-	// Determine database label
-	var label kv.Label
-	switch *dbType {
-	case "chaindata":
-		label = kv.ChainDB
-	case "smt":
-		label = kv.SmtDB
-	default:
-		log.Error("Invalid database type", "type", *dbType, "expected", "chaindata or smt")
+	// Validate configuration consistency
+	if err := validateDatabaseConfiguration(*dbType, *splitDB); err != nil {
+		log.Error(err.Error())
 		os.Exit(1)
 	}
 
-	// Handle relative paths: if source path is relative, make it absolute from the correct base
-	if !filepath.IsAbs(*sourceDBPath) {
-		// When called from main program, we need to resolve relative paths correctly
-		if cwd, err := os.Getwd(); err == nil {
-			// If we're in a subdirectory (like cmd/compact-db), go up to main directory
-			if strings.Contains(cwd, "cmd/compact-db") {
-				basePath := filepath.Dir(filepath.Dir(cwd)) // Go up two levels
-				*sourceDBPath = filepath.Join(basePath, *sourceDBPath)
-			}
-		}
+	// Determine database label based on type and split database configuration
+	label, err := getDatabaseLabelWithSplitDB(*dbType, *splitDB)
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
 	}
 
+	// Initialize SMT configuration based on split database flag
+	kv.InitStandaloneSMT(*splitDB)
+
+	// Handle relative paths: if source path is relative, make it absolute from the correct base
+	*sourceDBPath = resolveDatabasePath(*sourceDBPath)
+
 	// Also handle output path if it's relative (copy mode only)
-	if !*inPlace && *outputPath != "" && !filepath.IsAbs(*outputPath) {
-		if cwd, err := os.Getwd(); err == nil {
-			if strings.Contains(cwd, "cmd/compact-db") {
-				basePath := filepath.Dir(filepath.Dir(cwd)) // Go up two levels
-				*outputPath = filepath.Join(basePath, *outputPath)
-			}
-		}
+	if !*inPlace && *outputPath != "" {
+		*outputPath = resolveDatabasePath(*outputPath)
 	}
 
 	// Check source database exists
-	dbFile := filepath.Join(*sourceDBPath, "mdbx.dat")
-	if _, err := os.Stat(dbFile); os.IsNotExist(err) {
-		log.Error("Source database not found", "path", *sourceDBPath, "file", dbFile)
+	if err := checkDatabaseExists(*sourceDBPath); err != nil {
+		log.Error(err.Error())
 		os.Exit(1)
 	}
 
@@ -235,12 +165,6 @@ func main() {
 
 	// Additional safety check: verify source database is not locked
 	fmt.Printf("Verifying database accessibility...\n")
-
-	// Initialize SMT configuration if needed
-	if label == kv.SmtDB {
-		kv.InitStandaloneSMT(true) // SMT standalone mode
-	}
-
 	testDB := mdbx2.NewMDBX(log).Path(*sourceDBPath).
 		Label(label).
 		WithTableCfg(func(_ kv.TableCfg) kv.TableCfg { return getTableCfgForLabel(label) }).
@@ -263,12 +187,20 @@ func main() {
 	// Use maximum read-ahead threads for better I/O
 	optimizedThreads := backup.ReadAheadThreads * 2 // Double the threads
 
-	// For SMT databases, we need special handling due to erigon-lib marking SMT tables as deprecated
+	// Choose compaction method based on database configuration
 	if label == kv.SmtDB {
-		fmt.Printf("SMT compaction: manually copying %d SMT tables\n", len(smtTableNames))
+		// Standalone SMT database - use manual copy to handle deprecated table logic
+		fmt.Printf("🔧 Standalone SMT compaction: manually copying %d SMT tables\n", len(smtTableNames))
+		fmt.Printf("    (Using manual copy due to erigon-lib deprecated table handling)\n")
 		err = manualSmtCopy(ctx, src, dst, smtTableNames, optimizedThreads, log)
 	} else {
-		// Use standard backup for chaindata
+		// Integrated database (ChainDB) - includes both chaindata and SMT tables
+		if *dbType == "smt" && !*splitDB {
+			fmt.Printf("🔧 Integrated database compaction: processing chaindata + SMT tables together\n")
+			fmt.Printf("    (SMT data is stored in chaindata database, all tables will be preserved)\n")
+		} else {
+			fmt.Printf("🔧 Chaindata compaction: processing chaindata tables\n")
+		}
 		err = backup.Kv2kv(ctx, src, dst, nil, optimizedThreads, log)
 	}
 
@@ -388,211 +320,4 @@ func main() {
 		fmt.Printf("4. Start your Erigon node\n")
 		fmt.Printf("5. If everything works, remove backup: rm -rf %s.backup\n", *sourceDBPath)
 	}
-}
-
-// analyzeDatabase returns actual disk usage and table data size
-func analyzeDatabase(dbPath string, label kv.Label, logger logv3.Logger) (uint64, uint64, error) {
-	// Get actual disk usage (like `du` command) instead of sparse file logical size
-	dbFile := filepath.Join(dbPath, "mdbx.dat")
-	fileInfo, err := os.Stat(dbFile)
-	if err != nil {
-		return 0, 0, fmt.Errorf("failed to stat database file: %w", err)
-	}
-
-	var actualFileSize uint64
-	// For sparse files, we need to get actual disk usage using syscall
-	if stat, ok := fileInfo.Sys().(*syscall.Stat_t); ok {
-		// stat.Blocks is in 512-byte blocks on most Unix systems
-		actualFileSize = uint64(stat.Blocks * 512)
-	} else {
-		// Fallback to logical size if syscall not available
-		actualFileSize = uint64(fileInfo.Size())
-	}
-
-	// Open database for table analysis
-	// Initialize SMT configuration if needed
-	if label == kv.SmtDB {
-		kv.InitStandaloneSMT(true) // SMT standalone mode
-	}
-
-	db := mdbx2.NewMDBX(logger).Path(dbPath).
-		Label(label).
-		WithTableCfg(func(_ kv.TableCfg) kv.TableCfg { return getTableCfgForLabel(label) }).
-		Readonly().
-		MustOpen()
-	defer db.Close()
-
-	ctx := context.Background()
-	tx, err := db.BeginRo(ctx)
-	if err != nil {
-		return 0, 0, err
-	}
-	defer tx.Rollback()
-
-	// Get MDBX transaction for table stats
-	mdbxTx, ok := tx.(*mdbx2.MdbxTx)
-	if !ok {
-		return 0, 0, fmt.Errorf("not MDBX transaction")
-	}
-
-	// Calculate table data size
-	tables, err := tx.ListBuckets()
-	if err != nil {
-		return 0, 0, err
-	}
-
-	var tableSize uint64
-	pageSize := db.PageSize()
-
-	fmt.Printf("\n=== Found Tables in Database ===\n")
-	fmt.Printf("Total tables found: %d\n", len(tables))
-
-	var foundTables []string
-	for _, tableName := range tables {
-		stat, err := mdbxTx.BucketStat(tableName)
-		if err != nil {
-			fmt.Printf("❌ %s (error: %v)\n", tableName, err)
-			continue // Skip failed tables
-		}
-		totalPages := stat.LeafPages + stat.BranchPages + stat.OverflowPages
-		tableSize += totalPages * pageSize
-
-		size := totalPages * pageSize
-		if stat.Entries > 0 {
-			fmt.Printf("✅ %s (%d entries, %s)\n", tableName, stat.Entries, datasize.ByteSize(size).HumanReadable())
-			foundTables = append(foundTables, tableName)
-		} else {
-			fmt.Printf("🔹 %s (empty)\n", tableName)
-		}
-	}
-
-	fmt.Printf("\nNon-empty tables: %d\n", len(foundTables))
-
-	// Return actual disk usage and table data size
-	return actualFileSize, tableSize, nil
-}
-
-// openOptimizedCompactPair creates highly optimized database connections for fast compaction
-func openOptimizedCompactPair(from, to string, label kv.Label, logger logv3.Logger) (kv.RoDB, kv.RwDB) {
-	const OptimizedThreadsLimit = 16_000 // Increased from default 9_000
-
-	// Initialize SMT configuration if needed
-	if label == kv.SmtDB {
-		kv.InitStandaloneSMT(true) // SMT standalone mode
-	}
-
-	// Source database with maximum read optimization
-	src := mdbx2.NewMDBX(logger).Path(from).
-		Label(label).
-		RoTxsLimiter(semaphore.NewWeighted(OptimizedThreadsLimit)).
-		WithTableCfg(func(_ kv.TableCfg) kv.TableCfg { return getTableCfgForLabel(label) }).
-		Flags(func(flags uint) uint {
-			// Enable read optimizations - remove NoReadahead for better prefetching
-			return flags | mdbx.Accede | mdbx.LifoReclaim&^mdbx.NoReadahead
-		}).
-		MustOpen()
-
-	// Get source info for optimal destination setup
-	info, err := src.(*mdbx2.MdbxKV).Env().Info(nil)
-	if err != nil {
-		panic(err)
-	}
-
-	// Destination database with write optimization
-	dst := mdbx2.NewMDBX(logger).Path(to).
-		Label(label).
-		PageSize(datasize.ByteSize(info.PageSize).Bytes()). // Keep same page size
-		MapSize(datasize.ByteSize(info.Geo.Upper)).
-		GrowthStep(4 * datasize.GB).         // Conservative growth step
-		DirtySpace(uint64(1 * datasize.GB)). // Conservative dirty space
-		Flags(func(flags uint) uint {
-			// Enable write optimizations
-			return flags | mdbx.WriteMap | mdbx.LifoReclaim | mdbx.SafeNoSync
-		}).
-		WithTableCfg(func(_ kv.TableCfg) kv.TableCfg { return getTableCfgForLabel(label) }).
-		MustOpen()
-
-	return src, dst
-}
-
-// manualSmtCopy bypasses erigon-lib's deprecated table logic for SMT tables
-func manualSmtCopy(ctx context.Context, src kv.RoDB, dst kv.RwDB, tables []string, readAheadThreads int, logger logv3.Logger) error {
-	srcTx, err := src.BeginRo(ctx)
-	if err != nil {
-		return err
-	}
-	defer srcTx.Rollback()
-
-	for _, tableName := range tables {
-		// Check if table exists and has data
-		srcCursor, err := srcTx.Cursor(tableName)
-		if err != nil {
-			// Table doesn't exist, skip it
-			fmt.Printf("⚠️  Table %s does not exist, skipping\n", tableName)
-			continue
-		}
-
-		// Check if table has any data
-		k, _, err := srcCursor.First()
-		if err != nil || k == nil {
-			// Table is empty, skip it
-			fmt.Printf("🔹 Table %s is empty, skipping\n", tableName)
-			continue
-		}
-
-		// Table has data, copy it
-		fmt.Printf("📋 Copying table %s...\n", tableName)
-
-		// Create and clear destination table first
-		if err := dst.Update(ctx, func(tx kv.RwTx) error {
-			if err := tx.(kv.BucketMigrator).CreateBucket(tableName); err != nil {
-				// Table might already exist, that's OK
-			}
-			return tx.ClearBucket(tableName)
-		}); err != nil {
-			return fmt.Errorf("failed to prepare destination table %s: %w", tableName, err)
-		}
-
-		// Copy all data
-		dstTx, err := dst.BeginRw(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to begin destination transaction: %w", err)
-		}
-
-		dstCursor, err := dstTx.RwCursor(tableName)
-		if err != nil {
-			dstTx.Rollback()
-			return fmt.Errorf("failed to open destination cursor for %s: %w", tableName, err)
-		}
-
-		// Reset source cursor and copy all entries
-		srcCursor, err = srcTx.Cursor(tableName)
-		if err != nil {
-			dstTx.Rollback()
-			return fmt.Errorf("failed to reopen source cursor for %s: %w", tableName, err)
-		}
-
-		entryCount := 0
-		for k, v, err := srcCursor.First(); k != nil; k, v, err = srcCursor.Next() {
-			if err != nil {
-				dstTx.Rollback()
-				return fmt.Errorf("failed to read from source table %s: %w", tableName, err)
-			}
-
-			if err = dstCursor.Append(k, v); err != nil {
-				dstTx.Rollback()
-				return fmt.Errorf("failed to write to destination table %s: %w", tableName, err)
-			}
-			entryCount++
-		}
-
-		if err := dstTx.Commit(); err != nil {
-			return fmt.Errorf("failed to commit destination transaction for %s: %w", tableName, err)
-		}
-
-		fmt.Printf("✅ Copied %d entries in table %s\n", entryCount, tableName)
-	}
-
-	logger.Info("SMT manual copy completed")
-	return nil
 }

@@ -241,6 +241,7 @@ test-e2e: stop all ## Runs group xlayer feature e2e tests checking race conditio
 
 .PHONY: test-e2e-prune
 test-e2e-prune: stop all ## Runs group xlayer feature e2e tests checking race conditions
+	sleep 10
 	MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 600s -run TestPruneRPC ./e2e/
 	echo "Database pruning test completed, preparing for post-pruning verification..."
 
@@ -588,13 +589,30 @@ vmtouch-check:
 	docker exec -it xlayer-seq sh -c "vmtouch /home/erigon/data/chaindata/mdbx.dat"
 	docker exec -it xlayer-seq sh -c "vmtouch /home/erigon/data/smt/mdbx.dat"
 
-# Database pruning configuration
+.PHONY: prune
+prune:
+	@echo "Step 1: Pruning Sequencer Database..."
+	XLAYER_DATA_DIR=./data/seq $(DOCKER_COMPOSE) up xlayer-prune
+	@echo "Step 2: Pruning RPC Database..."
+	XLAYER_DATA_DIR=./data/rpc $(DOCKER_COMPOSE) up xlayer-prune
+	@echo "✅ All databases pruned successfully!"
+
+
 XLAYER_DATA_DIR ?= ./data/seq
 
-.PHONY: prune
-prune: ## Prune xlayer-seq database
-	@echo "🗂️  Database Pruning Configuration:"
+.PHONY: prune-db
+prune-db:
+	@echo "🗂️  Pruning Database:"
 	@echo "   Data Directory: $(XLAYER_DATA_DIR)"
-	@echo "   Target: Chaindata + SMT databases"
-	@echo ""
 	XLAYER_DATA_DIR=$(XLAYER_DATA_DIR) $(DOCKER_COMPOSE) up xlayer-prune
+
+.PHONY: prune-list
+prune-list:
+	@echo "🗂️  Listing Tables:"
+	@echo "   Data Directory: $(XLAYER_DATA_DIR)"
+	XLAYER_DATA_DIR=$(XLAYER_DATA_DIR) $(DOCKER_COMPOSE) up xlayer-prune-list
+
+prune-compact:
+	@echo "🗂️  Compacting Database:"
+	@echo "   Data Directory: $(XLAYER_DATA_DIR)"
+	XLAYER_DATA_DIR=$(XLAYER_DATA_DIR) $(DOCKER_COMPOSE) up xlayer-compact
