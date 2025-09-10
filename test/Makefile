@@ -611,3 +611,8 @@ prune-list:
 	@echo "🗂️  Listing Tables:"
 	@echo "   Data Directory: $(XLAYER_DATA_DIR)"
 	XLAYER_DATA_DIR=$(XLAYER_DATA_DIR) $(DOCKER_COMPOSE) up xlayer-prune-list
+
+prune-compact:
+	@echo "🗂️  Compacting Database:"
+	@echo "   Data Directory: $(XLAYER_DATA_DIR)"
+	XLAYER_DATA_DIR=$(XLAYER_DATA_DIR) $(DOCKER_COMPOSE) up xlayer-compact

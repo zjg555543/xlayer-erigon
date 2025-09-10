@@ -626,3 +626,33 @@ services:
         sleep 3
       "
     restart: "no"
+
+  # Compact database
+  xlayer-compact:
+    container_name: xlayer-compact
+    image: cdk-erigon
+    volumes:
+      - ${XLAYER_DATA_DIR:-./data/seq/}:/home/erigon/data/
+    working_dir: /home/erigon
+    command: >
+      sh -c "
+        echo 'Action 1: Listing tables...' &&
+        prune-tool list-tables ./data &&
+        echo 'Action 2: Compacting chaindata...' &&
+        echo 'Checking for SMT database...' &&
+        if [ -f ./data/smt/mdbx.dat ]; then
+          echo 'Action 2: Compacting db with split-db...' &&
+          prune-tool compact-db -source data/chaindata -split-db -in-place &&
+          echo 'Compacting SMT database...' &&
+          prune-tool compact-db -source data/smt -in-place -split-db -type smt
+        else
+          echo 'Action 2: Compacting db without split-db...' &&
+          prune-tool compact-db -source data/chaindata  -in-place
+        fi &&
+        echo 'Action 2: Compacting db Done!' $XLAYER_DATA_DIR &&
+        sleep 2 &&
+        echo 'Action 3: Listing tables...' &&
+        prune-tool list-tables ./data &&
+        echo 'Action 3: Listing tables Done!' $XLAYER_DATA_DIR
+      "
+    restart: "no"
