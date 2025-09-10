@@ -586,51 +586,43 @@ services:
     working_dir: /home/erigon
     command: >
       sh -c "
-        echo 'Checking LOCK...' &&
-        if flock -n ./data/LOCK echo 'OK' 2>/dev/null; then
-          echo 'Checking LOCK OK'
-        else
-          echo 'ERROR: Node running! Stop xlayer-seq first'
-          exit 1
-        fi &&
-        echo 'Step 1: Listing tables...' &&
+        echo 'Action 1: Listing tables...' &&
         prune-tool list-tables ./data &&
-        echo 'Step 2: Pruning...' &&
+        echo 'Action 2: Pruning...' &&
         prune-tool prune-chaindata ./data aggressive --keep-recent-batches=1 --yes &&
+        echo 'Action 2 completed, listing tables...' &&
+        sleep 3 &&
         prune-tool list-tables ./data &&
-        echo 'Step 3: Compacting chaindata...' &&
-        mdbx_copy -c ./data/chaindata/mdbx.dat ./data/chaindata/mdbx.dat.new &&
-        rm -rf ./data/chaindata/mdbx.dat &&
-        mv ./data/chaindata/mdbx.dat.new ./data/chaindata/mdbx.dat &&
-        echo 'Step 4: Compacting SMT...' &&
+        echo 'Action 3: Compacting chaindata...' &&
+        echo 'Checking for SMT database...' &&
         if [ -f ./data/smt/mdbx.dat ]; then
-          echo 'Step 5: Compacting SMT database...' &&
-          mdbx_copy -c ./data/smt/mdbx.dat ./data/smt/mdbx.dat.new &&
-          rm -rf ./data/smt/mdbx.dat &&
-          mv ./data/smt/mdbx.dat.new ./data/smt/mdbx.dat
+          echo 'Action 3: Compacting db with split-db...' &&
+          prune-tool compact-db -source data/chaindata -split-db -in-place &&
+          echo 'Compacting SMT database...' &&
+          prune-tool compact-db -source data/smt -in-place -split-db -type smt
         else
-          echo 'Step 5: SMT database not found (unified database mode), skipping SMT compaction'
+          echo 'Action 3: Compacting db without split-db...' &&
+          prune-tool compact-db -source data/chaindata  -in-place
         fi &&
-        echo 'Done! Pruning completed for directory:' $XLAYER_DATA_DIR &&
-        prune-tool list-tables ./data
+        echo 'Action 3: Compacting db Done!' $XLAYER_DATA_DIR &&
+        sleep 3 &&
+        echo 'Action 4: Listing tables...' &&
+        prune-tool list-tables ./data &&
+        echo 'Action 4: Listing tables Done!' $XLAYER_DATA_DIR
       "
     restart: "no"
 
-  xlayer-prune-list-tables:
-    container_name: xlayer-prune
+  xlayer-prune-list:
+    container_name: xlayer-prune-list
     image: cdk-erigon
     volumes:
       - ${XLAYER_DATA_DIR:-./data/seq/}:/home/erigon/data/
     working_dir: /home/erigon
     command: >
       sh -c "
-        echo 'Checking LOCK...' &&
-        if flock -n ./data/LOCK echo 'OK' 2>/dev/null; then
-          echo 'Checking LOCK OK'
-        else
-          echo 'ERROR: Node running! Stop xlayer-seq first'
-          exit 1
-        fi &&
-        prune-tool list-tables ./data
+        echo 'Action 1: Listing tables...' $XLAYER_DATA_DIR &&
+        prune-tool list-tables ./data &&
+        echo 'Action 1: Compacting db Done!' $XLAYER_DATA_DIR &&
+        sleep 3
       "
     restart: "no"

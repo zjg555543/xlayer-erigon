@@ -589,32 +589,25 @@ vmtouch-check:
 	docker exec -it xlayer-seq sh -c "vmtouch /home/erigon/data/chaindata/mdbx.dat"
 	docker exec -it xlayer-seq sh -c "vmtouch /home/erigon/data/smt/mdbx.dat"
 
-# Database pruning configuration
-XLAYER_DATA_DIR ?= ./data/seq
-
-.PHONY: prune-mainnet
-prune-mainnet: ## Prune mainnet RPC database (./mainnet/rpc)
-	@echo "🗂️  Pruning mainnet RPC Database:"
-	@echo "   Data Directory: ./mainnet/rpc"
-	XLAYER_DATA_DIR=./mainnet/rpc $(DOCKER_COMPOSE) up xlayer-prune
-
-.PHONY: prune-all
-prune: ## Prune both sequencer and RPC databases
-	@echo "🗂️  Pruning Local All Databases:"
-	@echo "   Sequencer: ./data/seq"
-	@echo "   RPC: ./data/rpc"
-	@echo ""
+.PHONY: prune
+prune:
 	@echo "Step 1: Pruning Sequencer Database..."
 	XLAYER_DATA_DIR=./data/seq $(DOCKER_COMPOSE) up xlayer-prune
-	@echo ""
 	@echo "Step 2: Pruning RPC Database..."
 	XLAYER_DATA_DIR=./data/rpc $(DOCKER_COMPOSE) up xlayer-prune
-	@echo ""
 	@echo "✅ All databases pruned successfully!"
 
 
-.PHONY: prune-mainnet-list-tables
-prune-mainnet-list-tables:
-	@echo "🗂️  Pruning List Tables:"
-	@echo "   Data Directory: ./mainnet/rpc"
-	XLAYER_DATA_DIR=./mainnet/rpc $(DOCKER_COMPOSE) up xlayer-prune-list-tables
+XLAYER_DATA_DIR ?= ./data/seq
+
+.PHONY: prune-db
+prune-db:
+	@echo "🗂️  Pruning Database:"
+	@echo "   Data Directory: $(XLAYER_DATA_DIR)"
+	XLAYER_DATA_DIR=$(XLAYER_DATA_DIR) $(DOCKER_COMPOSE) up xlayer-prune
+
+.PHONY: prune-list
+prune-list:
+	@echo "🗂️  Listing Tables:"
+	@echo "   Data Directory: $(XLAYER_DATA_DIR)"
+	XLAYER_DATA_DIR=$(XLAYER_DATA_DIR) $(DOCKER_COMPOSE) up xlayer-prune-list

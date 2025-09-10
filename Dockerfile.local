@@ -50,8 +50,8 @@ RUN --mount=type=cache,target=/root/.cache \
     cd cmd/prune-mdbx-data && make build && \
     cp prune-tool /app/build/bin/prune-tool && \
     cp list-tables-tool /app/build/bin/list-tables-tool && \
-    cp prune-chaindata-tool /app/build/bin/prune-chaindata-tool
-    # cp compact-db-tool /app/build/bin/compact-db-tool
+    cp prune-chaindata-tool /app/build/bin/prune-chaindata-tool && \
+    cp compact-db-tool /app/build/bin/compact-db-tool
 
 # Install dlv (Delve debugger)
 RUN --mount=type=cache,target=/root/.cache \
@@ -81,7 +81,7 @@ COPY --from=tools-builder /app/build/bin/dlv /usr/local/bin/dlv
 COPY --from=tools-builder /app/build/bin/prune-tool /usr/local/bin/prune-tool
 COPY --from=tools-builder /app/build/bin/list-tables-tool /usr/local/bin/list-tables-tool
 COPY --from=tools-builder /app/build/bin/prune-chaindata-tool /usr/local/bin/prune-chaindata-tool
-# COPY --from=tools-builder /app/build/bin/compact-db-tool /usr/local/bin/compact-db-tool
+COPY --from=tools-builder /app/build/bin/compact-db-tool /usr/local/bin/compact-db-tool
 COPY --from=builder /app/build/bin/cdk-erigon /usr/local/bin/cdk-erigon
 COPY --from=builder /app/build/bin/smt-db-split /usr/local/bin/smt-db-split
 COPY --from=builder /app/cmd/smt-db-split/prepare-db-split.sh /usr/local/bin/prepare-db-split.sh

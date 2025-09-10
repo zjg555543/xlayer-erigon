@@ -24,7 +24,6 @@ func main() {
 	case "prune-chaindata":
 		runPruneChaindata(os.Args[2:])
 	case "compact-db":
-		panic("compact-db is not supported")
 		runCompactDB(os.Args[2:])
 	case "help":
 		printUsage()
