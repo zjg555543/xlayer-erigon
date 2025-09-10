@@ -246,7 +246,7 @@ test-e2e-prune: stop all ## Runs group xlayer feature e2e tests checking race co
 	echo "Database pruning test completed, preparing for post-pruning verification..."
 
 	sleep 10
-	MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 600s ../ci/e2e-1/...
+	trap '$(STOP)' EXIT; MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 600s ../ci/e2e-1/...
 	echo "E2E tests passed"
 
 .PHONY: test-realtime-e2e
