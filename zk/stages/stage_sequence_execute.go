@@ -733,8 +733,7 @@ BatchLoop:
 				}
 			}
 
-			// For X Layer, we should break the outer loop if we encounter a gas overflow
-			// CRITICAL: We must ensure bad/mined transactions are removed from inclusion list, to prevent "nonce too low" errors in subsequent iterations
+			// For X Layer: we should break the outer loop if we encounter a gas overflow and ensure bad/mined transactions are removed from inclusion list, to prevent "nonce too low" errors in subsequent iterations
 			if checkBreakOuterLoop {
 				log.Info(fmt.Sprintf("[%s] gracefull break OuterLoopTransactions, blockNumber: %d", logPrefix, blockNumber))
 				break OuterLoopTransactions
