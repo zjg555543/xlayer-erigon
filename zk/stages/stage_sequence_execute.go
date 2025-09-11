@@ -585,7 +585,7 @@ BatchLoop:
 			badTxHashes := make([]common.Hash, 0)
 			minedTxHashes := make([]common.Hash, 0)
 
-			gracefullCheckBreakOuterLoop := false
+			checkBreakOuterLoop := false
 		InnerLoopTransactions:
 			for i, transaction := range batchState.blockState.transactionsForInclusion {
 				// quick check if we should stop handling transactions
@@ -680,7 +680,7 @@ BatchLoop:
 						panic(fmt.Sprintf("block gas limit overflow in recovery block: %d", blockNumber))
 					}
 					log.Info(fmt.Sprintf("[%s] gas overflowed adding transaction to block", logPrefix), "block", blockNumber, "tx-hash", txHash, "tx-nonce", transaction.GetNonce())
-					gracefullCheckBreakOuterLoop = true
+					checkBreakOuterLoop = true
 					break InnerLoopTransactions
 				case overflowNone:
 				}
@@ -735,7 +735,7 @@ BatchLoop:
 
 			// For X Layer, we should break the outer loop if we encounter a gas overflow
 			// CRITICAL: We must ensure bad/mined transactions are removed from inclusion list, to prevent "nonce too low" errors in subsequent iterations
-			if gracefullCheckBreakOuterLoop {
+			if checkBreakOuterLoop {
 				log.Info(fmt.Sprintf("[%s] gracefull break OuterLoopTransactions, blockNumber: %d", logPrefix, blockNumber))
 				break OuterLoopTransactions
 			}
