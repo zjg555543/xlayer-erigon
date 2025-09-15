@@ -9,13 +9,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ledgerwatch/erigon-lib/common/cmp"
 	"github.com/ledgerwatch/erigon-lib/kv"
-
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
-	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/log/v3"
 )
 
 var (
@@ -26,7 +26,8 @@ var (
 
 	// Global variable storing a pointer to the current finalized batch number.
 	// A nil pointer indicates the value has not been fetched yet.
-	currentFinalizedBatchNumber atomic.Pointer[uint64]
+	currentFinalizedBatchNumber    atomic.Uint64
+	currentFinalizedBatchErrorFlag atomic.Bool
 
 	// Global variable storing a pointer to the current block gas limit.
 	// A nil pointer indicates the value has not been fetched yet.
@@ -38,6 +39,10 @@ var (
 	// ErrBlockGasLimitUnavailable is returned when the poller has not yet fetched the block gas limit.
 	ErrBlockGasLimitUnavailable = errors.New("block gas limit is not yet available from the poller")
 )
+
+func init() {
+	currentFinalizedBatchErrorFlag.Store(true)
+}
 
 // SetSequencerRpcUrl sets the global sequencer RPC URL
 func SetSequencerRpcUrl(url string) {
@@ -80,9 +85,12 @@ func getFinalizedBlockNumberFromLocalDB(tx kv.Tx) (uint64, error) {
 	}
 	hermezDb := hermez_db.NewHermezDbReader(tx)
 	// we've got the highest batch to execute to, now get it's highest block
-	highestVerifiedBlockHeight, _, err := hermezDb.GetHighestBlockInBatch(highestVerifiedBatchNo)
+	highestVerifiedBlockHeight, found, err := hermezDb.GetHighestBlockInBatch(highestVerifiedBatchNo)
 	if err != nil {
 		return 0, err
+	}
+	if !found {
+		log.Warn("No blocks found in verified batch, using fallback", "batchNumber", highestVerifiedBatchNo)
 	}
 
 	var highestBlockNumber uint64
@@ -110,9 +118,13 @@ func getBlockNumberFromCachedFinalizedBatchNumber(tx kv.Tx) (uint64, error) {
 
 	// Use hermez database to get the highest block in the finalized batch
 	hermezDb := hermez_db.NewHermezDbReader(tx)
-	blockNumber, _, err := hermezDb.GetHighestBlockInBatch(batchNumber)
+	blockNumber, found, err := hermezDb.GetHighestBlockInBatch(batchNumber)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get highest block in batch %d: %w", batchNumber, err)
+	}
+	if !found {
+		log.Warn("No blocks found in finalized batch, returning 0", "batchNumber", batchNumber)
+		return 0, fmt.Errorf("no blocks found in finalized batch, batchNumber=%d", batchNumber)
 	}
 
 	return blockNumber, nil
@@ -120,38 +132,27 @@ func getBlockNumberFromCachedFinalizedBatchNumber(tx kv.Tx) (uint64, error) {
 
 // StartFinalizedBatchPoller starts a background goroutine that queries the sequencer
 // for finalized batch number on given interval; stops when ctx is done.
-func StartFinalizedBatchPoller(ctx context.Context, interval time.Duration) {
+func StartFinalizedBatchPoller(ctx context.Context, interval time.Duration, db kv.RoDB) {
 	if sequencer.IsSequencer() {
 		return
 	}
 
-	go startBackgroundQuery(ctx, interval)
+	go startBackgroundQuery(ctx, interval, db)
 }
 
 // startBackgroundQuery runs the poller loop that periodically fetches the
 // finalized batch number from the sequencer and updates the cache.
-func startBackgroundQuery(ctx context.Context, interval time.Duration) {
+func startBackgroundQuery(ctx context.Context, interval time.Duration, db kv.RoDB) {
 	if sequencerRpcUrl == "" {
 		log.Warn("finalized batch poller not started: empty sequencer RPC URL")
 		return
 	}
-	// Initial fetch to warm up the cache and handle early requests.
-	if bn, err := getFinalizedBatchNumberFromSequencer(sequencerRpcUrl); err != nil {
-		log.Error("failed to get finalized batch number from sequencer (initial fetch)", "err", err)
-	} else {
-		newVal := bn
-		currentFinalizedBatchNumber.Store(&newVal)
-	}
 
-	// Initial fetch for block gas limit
-	if gasLimit, err := getBlockGasLimitFromSequencer(sequencerRpcUrl); err != nil {
-		log.Warn("failed to get block gas limit from sequencer (initial fetch)", "err", err)
-		newVal := uint64(1000_0000)
-		currentBlockGasLimit.Store(&newVal)
-	} else {
-		newVal := gasLimit
-		currentBlockGasLimit.Store(&newVal)
-	}
+	log.Info("starting finalized batch poller", "interval", interval)
+
+	// Initial fetch to warm up the cache and handle early requests.
+	updateFinalizedBatchNumber(db)
+	updateBlockGasLimit(true)
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -162,24 +163,45 @@ func startBackgroundQuery(ctx context.Context, interval time.Duration) {
 			log.Info("finalized batch poller stopped")
 			return
 		case <-ticker.C:
-			bn, err := getFinalizedBatchNumberFromSequencer(sequencerRpcUrl)
-			if err != nil {
-				log.Error("failed to get finalized batch number from sequencer", "err", err)
-			} else {
-				newVal := bn
-				currentFinalizedBatchNumber.Store(&newVal)
-			}
-
-			// Also fetch block gas limit
-			gasLimit, err := getBlockGasLimitFromSequencer(sequencerRpcUrl)
-			if err != nil {
-				log.Warn("failed to get block gas limit from sequencer", "err", err)
-				// Don't continue here, we want to update batch number even if gas limit fails
-			} else {
-				newValGas := gasLimit
-				currentBlockGasLimit.Store(&newValGas)
-			}
+			updateFinalizedBatchNumber(db)
+			updateBlockGasLimit(false)
 		}
+	}
+}
+
+// updateFinalizedBatchNumber fetches and updates the finalized batch number from sequencer
+func updateFinalizedBatchNumber(db kv.RoDB) {
+	if seqBatchNum, err := getFinalizedBatchNumberFromSequencer(sequencerRpcUrl); err != nil {
+		currentFinalizedBatchErrorFlag.Store(true)
+		log.Error("failed to get finalized batch number from sequencer", "err", err)
+	} else {
+		currentFinalizedBatchErrorFlag.Store(false)
+		if seqBatchNum != 0 {
+			// Cap the finalized batch number to the locally downloaded batch number
+			cappedBatchNumber := capFinalizedBatchToLocal(seqBatchNum, db)
+			if cappedBatchNumber < currentFinalizedBatchNumber.Load() {
+				log.Warn("fetched finalized batch number less than currentFinalizedBatchNumber",
+					"fetchedFinalizedBatchNumber", cappedBatchNumber, "currentFinalizedBatchNumber", currentFinalizedBatchNumber.Load())
+			}
+			currentFinalizedBatchNumber.Store(cappedBatchNumber)
+		} else {
+			log.Warn("fetched finalized batch number 0 from sequencer with no error, skipping updating currentFinalizedBatchNumber")
+		}
+	}
+}
+
+// updateBlockGasLimit fetches and updates the block gas limit from sequencer
+func updateBlockGasLimit(isInitialFetch bool) {
+	if gasLimit, err := getBlockGasLimitFromSequencer(sequencerRpcUrl); err != nil {
+		log.Warn("failed to get block gas limit from sequencer", "err", err)
+		// Only set default value on initial fetch
+		if isInitialFetch {
+			newVal := uint64(1000_0000)
+			currentBlockGasLimit.Store(&newVal)
+		}
+	} else {
+		newVal := gasLimit
+		currentBlockGasLimit.Store(&newVal)
 	}
 }
 
@@ -217,11 +239,10 @@ func transHexToUint64(hex json.RawMessage) (uint64, error) {
 // getCachedFinalizedBatchNumber is the single source of truth for reading the latest batch number
 // fetched by the poller. It returns an error if the poller hasn't successfully fetched a value yet.
 func getCachedFinalizedBatchNumber() (uint64, error) {
-	valPtr := currentFinalizedBatchNumber.Load()
-	if valPtr == nil {
+	if currentFinalizedBatchErrorFlag.Load() {
 		return 0, ErrFinalizedBatchUnavailable
 	}
-	return *valPtr, nil
+	return currentFinalizedBatchNumber.Load(), nil
 }
 
 func getBlockGasLimitFromSequencer(sequencerRpcUrl string) (uint64, error) {
@@ -249,4 +270,40 @@ func GetCachedBlockGasLimit() (uint64, error) {
 // SetCachedBlockGasLimit sets the cached block gas limit (for testing purposes)
 func SetCachedBlockGasLimit(gasLimit uint64) {
 	currentBlockGasLimit.Store(&gasLimit)
+}
+
+// capFinalizedBatchToLocal caps the sequencer finalized batch number to the locally downloaded batch number.
+// This ensures we don't claim to have finalized batches that haven't been downloaded yet.
+// Returns the minimum of sequencerBatchNumber and locally downloaded batch number.
+func capFinalizedBatchToLocal(sequencerBatchNum uint64, db kv.RoDB) uint64 {
+	// If no database is provided, we can't check local state, so return the sequencer value
+	if db == nil {
+		log.Warn("Database not provided, cannot cap finalized batch to local state")
+		return sequencerBatchNum
+	}
+
+	// Create a read-only transaction to check local batch state
+	tx, err := db.BeginRo(context.Background())
+	if err != nil {
+		log.Error("Failed to begin read transaction for batch capping", "err", err)
+		return sequencerBatchNum
+	}
+	defer tx.Rollback()
+
+	localLatestBlockNum, err := stages.GetStageProgress(tx, stages.Finish)
+	if err != nil {
+		log.Error("Failed to get latest block number", "err", err)
+		return sequencerBatchNum
+	}
+
+	hermezDb := hermez_db.NewHermezDbReader(tx)
+	localBatchNum, err := hermezDb.GetBatchNoByL2Block(localLatestBlockNum)
+	if err != nil {
+		log.Error("Failed to get batch by block number", "err", err)
+		return sequencerBatchNum
+	}
+	log.Info("Get and update finalized batch number", "sequencerBatchNum", sequencerBatchNum,
+		"localBatchNum", localBatchNum, "localLatestBlockNum", localLatestBlockNum)
+
+	return cmp.Min(localBatchNum, sequencerBatchNum)
 }
