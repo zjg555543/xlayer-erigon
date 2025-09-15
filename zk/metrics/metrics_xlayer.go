@@ -40,7 +40,7 @@ var (
 		},
 		[]string{"component", "metric_type"},
 	)
-	
+
 	// Gas metrics
 	SeqBlockGasUsed = prometheus.NewGauge(
 		prometheus.GaugeOpts{
@@ -55,6 +55,22 @@ var (
 			Help: "Rpc dynamic gas price",
 		},
 	)
+
+	TxsInBlock = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "txs_in_block",
+			Help: "tx count per block",
+		},
+	)
+
+	// Realtime API metrics
+	RealtimeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "realtime_current",
+			Help: "Current realtime API state values",
+		},
+		[]string{"component", "metric_type"},
+	)
 )
 
 // Init registers all metrics with Prometheus
@@ -64,6 +80,8 @@ func Init() {
 	prometheus.MustRegister(OperationGauge)
 	prometheus.MustRegister(SeqBlockGasUsed)
 	prometheus.MustRegister(RpcDynamicGasPrice)
+	prometheus.MustRegister(TxsInBlock)
+	prometheus.MustRegister(RealtimeGauge)
 }
 
 // Block timing functions
@@ -192,4 +210,17 @@ func IncBatchInvalidTxCount(invalidTxCount float64) {
 
 func IncRpcInnerTxExecuted(innerTxCount float64) {
 	OperationCounter.WithLabelValues("rpc", "inner_tx_count").Add(innerTxCount)
+}
+
+func CountTxInBlock(txCount float64) {
+	TxsInBlock.Set(txCount)
+}
+
+// realtime functions
+func SetRealtimeBlockHeight(blockHeight float64) {
+	RealtimeGauge.WithLabelValues("realtime", "block_height").Set(blockHeight)
+}
+
+func SetRealtimePendingBlockHeight(blockHeight float64) {
+	RealtimeGauge.WithLabelValues("realtime", "pending_height").Set(blockHeight)
 }
