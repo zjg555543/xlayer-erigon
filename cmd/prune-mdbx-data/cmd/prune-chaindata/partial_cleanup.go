@@ -4,9 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 )
 

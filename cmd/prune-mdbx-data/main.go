@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 )
 
 func main() {
@@ -36,32 +35,23 @@ func main() {
 }
 
 func runListTables(dbPath string) {
-	// Build and run the list-tables subcommand
-	cmdDir := filepath.Join("cmd", "list-tables")
-	if err := os.Chdir(cmdDir); err != nil {
-		fmt.Printf("Error: failed to change to %s directory: %v\n", cmdDir, err)
-		os.Exit(1)
+	// Try local tool first, then system PATH
+	toolName := "list-tables-tool"
+	if _, err := os.Stat("./" + toolName); os.IsNotExist(err) {
+		// Use tool from PATH (Docker environment)
+		toolName = toolName
+	} else {
+		// Use local tool (development environment)
+		toolName = "./" + toolName
 	}
 
-	// Build the command
-	buildCmd := exec.Command("go", "build", "-o", "list-tables-tool", "main.go")
-	if err := buildCmd.Run(); err != nil {
-		fmt.Printf("Error: failed to build list-tables: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Run the command
-	runCmd := exec.Command("./list-tables-tool", "../../"+dbPath)
+	runCmd := exec.Command(toolName, dbPath)
 	runCmd.Stdout = os.Stdout
 	runCmd.Stderr = os.Stderr
 	if err := runCmd.Run(); err != nil {
 		fmt.Printf("Error: failed to run list-tables: %v\n", err)
 		os.Exit(1)
 	}
-
-	// Clean up
-	os.Remove("list-tables-tool")
-	os.Chdir("../..")
 }
 
 func runPruneChaindata(args []string) {
@@ -71,41 +61,23 @@ func runPruneChaindata(args []string) {
 		os.Exit(1)
 	}
 
-	// Build and run the prune-chaindata subcommand
-	cmdDir := filepath.Join("cmd", "prune-chaindata")
-	if err := os.Chdir(cmdDir); err != nil {
-		fmt.Printf("Error: failed to change to %s directory: %v\n", cmdDir, err)
-		os.Exit(1)
+	// Try local tool first, then system PATH
+	toolName := "prune-chaindata-tool"
+	if _, err := os.Stat("./" + toolName); os.IsNotExist(err) {
+		// Use tool from PATH (Docker environment)
+		toolName = toolName
+	} else {
+		// Use local tool (development environment)
+		toolName = "./" + toolName
 	}
 
-	// Build the command
-	buildCmd := exec.Command("go", "build", "-o", "prune-chaindata-tool", ".")
-	if err := buildCmd.Run(); err != nil {
-		fmt.Printf("Error: failed to build prune-chaindata: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Prepare arguments
-	cmdArgs := make([]string, 0, len(args)+1)
-	cmdArgs = append(cmdArgs, "../../"+args[0]) // db_path
-
-	// Add remaining arguments
-	if len(args) > 1 {
-		cmdArgs = append(cmdArgs, args[1:]...)
-	}
-
-	// Run the command
-	runCmd := exec.Command("./prune-chaindata-tool", cmdArgs...)
+	runCmd := exec.Command(toolName, args...)
 	runCmd.Stdout = os.Stdout
 	runCmd.Stderr = os.Stderr
 	if err := runCmd.Run(); err != nil {
 		fmt.Printf("Error: failed to run prune-chaindata: %v\n", err)
 		os.Exit(1)
 	}
-
-	// Clean up
-	os.Remove("prune-chaindata-tool")
-	os.Chdir("../..")
 }
 
 func runCompactDB(args []string) {
@@ -115,32 +87,23 @@ func runCompactDB(args []string) {
 		os.Exit(1)
 	}
 
-	// Build and run the compact-db subcommand
-	cmdDir := filepath.Join("cmd", "compact-db")
-	if err := os.Chdir(cmdDir); err != nil {
-		fmt.Printf("Error: failed to change to %s directory: %v\n", cmdDir, err)
-		os.Exit(1)
+	// Try local tool first, then system PATH
+	toolName := "compact-db-tool"
+	if _, err := os.Stat("./" + toolName); os.IsNotExist(err) {
+		// Use tool from PATH (Docker environment)
+		toolName = toolName
+	} else {
+		// Use local tool (development environment)
+		toolName = "./" + toolName
 	}
 
-	// Build the command
-	buildCmd := exec.Command("go", "build", "-o", "compact-db-tool", "main.go")
-	if err := buildCmd.Run(); err != nil {
-		fmt.Printf("Error: failed to build compact-db: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Run the command with all arguments
-	runCmd := exec.Command("./compact-db-tool", args...)
+	runCmd := exec.Command(toolName, args...)
 	runCmd.Stdout = os.Stdout
 	runCmd.Stderr = os.Stderr
 	if err := runCmd.Run(); err != nil {
 		fmt.Printf("Error: failed to run compact-db: %v\n", err)
 		os.Exit(1)
 	}
-
-	// Clean up
-	os.Remove("compact-db-tool")
-	os.Chdir("../..")
 }
 
 func printUsage() {
