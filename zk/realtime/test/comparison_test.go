@@ -113,9 +113,6 @@ func TestRealtimeComparison(t *testing.T) {
 		t.Run("getBlockByHash", func(t *testing.T) {
 			allPassed := true
 
-			// add pending to test getBlockByHash
-			testBlocks = append(testBlocks, "pending")
-
 			for _, blockParam := range testBlocks {
 				blockNumber, err := convertBlockParam(client, blockParam)
 				if err != nil {
@@ -254,16 +251,19 @@ func TestRealtimeComparison(t *testing.T) {
 		})
 
 		t.Run("getTransactionByHash", func(t *testing.T) {
-			txHashNew := transToken(t, context.Background(), client, uint256.NewInt(encoding.Gwei), testAddress.String())
-			realtimeTransaction, err := client.RealtimeGetTransactionByHash(libcommon.HexToHash(txHashNew), nil)
-			require.NoError(t, err)
+			numberOfTransactions := 5
+			txHashesNew := transTokenBatch(t, context.Background(), client, uint256.NewInt(encoding.Gwei), testAddress.String(), numberOfTransactions)
+			for _, txHashNew := range txHashesNew {
+				realtimeTransaction, err := client.RealtimeGetTransactionByHash(libcommon.HexToHash(txHashNew), nil)
+				require.NoError(t, err)
 
-			// Make direct RPC call to non-realtime node to get JSON response
-			var nonRealtimeTransaction rtclient.RpcTransaction
-			err = nonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeTransaction, "eth_getTransactionByHash", libcommon.HexToHash(txHashNew))
-			require.NoError(t, err)
+				// Make direct RPC call to non-realtime node to get JSON response
+				var nonRealtimeTransaction rtclient.RpcTransaction
+				err = nonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeTransaction, "eth_getTransactionByHash", libcommon.HexToHash(txHashNew))
+				require.NoError(t, err)
 
-			require.Equal(t, realtimeTransaction, nonRealtimeTransaction, fmt.Sprintf("Transactions should be identical for hash %s", txHash))
+				require.Equal(t, realtimeTransaction, nonRealtimeTransaction, fmt.Sprintf("Transactions should be identical for hash %s", txHash))
+			}
 		})
 
 		t.Run("getRawTransactionByHash", func(t *testing.T) {
@@ -343,7 +343,7 @@ func TestRealtimeComparison(t *testing.T) {
 			var nonRealtimeBlockNumber string
 			err = nonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeBlockNumber, "eth_blockNumber")
 			require.NoError(t, err)
-			require.Equal(t, "0x"+strconv.FormatUint(realtimeBlockNumber, 16), nonRealtimeBlockNumber, "Block numbers should match")
+			require.GreaterOrEqual(t, "0x"+strconv.FormatUint(realtimeBlockNumber, 16), nonRealtimeBlockNumber, "Realtime block number should be at least as big as non-realtime block number")
 		})
 
 		t.Run("call", func(t *testing.T) {

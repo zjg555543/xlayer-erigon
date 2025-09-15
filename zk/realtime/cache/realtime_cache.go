@@ -8,8 +8,10 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/state"
+	"github.com/ledgerwatch/erigon/zk/metrics"
 	kafkaTypes "github.com/ledgerwatch/erigon/zk/realtime/kafka/types"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
+	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -129,6 +131,7 @@ func (cache *RealtimeCache) GetHighestConfirmHeight() uint64 {
 func (cache *RealtimeCache) PutHighestConfirmHeight(blockNum uint64) {
 	if blockNum > cache.highestConfirmHeight.Load() {
 		cache.highestConfirmHeight.Store(blockNum)
+		metrics.SetRealtimeBlockHeight(float64(blockNum))
 	}
 }
 
@@ -164,6 +167,7 @@ func (cache *RealtimeCache) GetHighestPendingHeight() uint64 {
 func (cache *RealtimeCache) PutHighestPendingHeight(blockNum uint64) {
 	if blockNum > cache.highestPendingHeight.Load() {
 		cache.highestPendingHeight.Store(blockNum)
+		metrics.SetRealtimePendingBlockHeight(float64(blockNum))
 	}
 }
 
@@ -193,7 +197,6 @@ func (cache *RealtimeCache) TryCloseBlockFromConfirmedBlockMsg(blockNum uint64, 
 			break
 		}
 		if context.blockNum > blockNum {
-			// Next block header must be received first before previous block can be closed
 			return fmt.Errorf("block %d is not in pending blocks", blockNum)
 		}
 	}
@@ -353,7 +356,7 @@ func (cache *RealtimeCache) tryCloseBlock(pendingBlockContext *PendingBlockConte
 	}
 
 	if pendingBlockContext.txCount < 0 {
-		// Header not received yet. Skip close
+		// confirmed block info is not received yet. Skip close
 		return nil
 	}
 
@@ -396,6 +399,22 @@ func (cache *RealtimeCache) tryCloseBlock(pendingBlockContext *PendingBlockConte
 
 	cache.PutHighestConfirmHeight(pendingBlockContext.blockNum)
 	log.Info(fmt.Sprintf("[Realtime] Closed block %d, pending blocks queue size: %d", pendingBlockContext.blockNum, cache.pendingBlocks.Size()))
+
+	header, _, blockHash, ok := cache.Stateless.GetBlockInfo(pendingBlockContext.blockNum)
+	if !ok { // Should never happen
+		log.Error(fmt.Sprintf("[Realtime] Block info not found for block number %d", pendingBlockContext.blockNum))
+		return nil
+	}
+	utils.LogTrace(
+		"",                               // txhash
+		utils.ServiceNameRPC,             // serviceName
+		utils.StepRealtimeCloseBlock.ID,  // processId
+		utils.StepRealtimeCloseBlock.Key, // processWord
+		pendingBlockContext.blockNum,     // blockHeight
+		blockHash.String(),               // blockHash
+		header.Time,                      // blockTime
+		-1,                               // transactionType
+	)
 
 	return nil
 }
