@@ -1,9 +1,10 @@
 package vm
 
 var (
-	forkID4InstructionSet            = newForkID4InstructionSet()
-	forkID5DragonfruitInstructionSet = newForkID5DragonfruitInstructionSet()
-	forkID8ElderberryInstructionSet  = newForkID8InstructionSet()
+	forkID4InstructionSet              = newForkID4InstructionSet()
+	forkID5DragonfruitInstructionSet   = newForkID5DragonfruitInstructionSet()
+	forkID8ElderberryInstructionSet    = newForkID8InstructionSet()
+	ForkId13DurianDencunInstructionSet = newForkID13DurianDencunInstructionSet()
 )
 
 // newForkID4InstructionSet returns the instruction set for the forkID4
@@ -76,6 +77,15 @@ func newForkID8InstructionSet() JumpTable {
 	instructionSet[LOG2].execute = makeLog_zkevm_regularLogIndexes(2)
 	instructionSet[LOG3].execute = makeLog_zkevm_regularLogIndexes(3)
 	instructionSet[LOG4].execute = makeLog_zkevm_regularLogIndexes(4)
+
+	validateAndFillMaxStack(&instructionSet)
+	return instructionSet
+}
+
+func newForkID13DurianDencunInstructionSet() JumpTable {
+	instructionSet := newForkID8InstructionSet()
+
+	// TODO: X Layer add the new instructions for the forkID13DurianDencun
 
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
