@@ -132,3 +132,4 @@ bridge-config-artifact
 kurtosis-cli.tar.gz
 zk/debug_tools/rpc-cache/cache.db
 zk/debug_tools/rpc-cache/rpc-cache
+zk/debug_tools/test-contracts/out
