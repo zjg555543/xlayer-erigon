@@ -1,6 +1,8 @@
 package vm
 
 import (
+	"fmt"
+
 	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common/math"
 	"github.com/ledgerwatch/erigon/core/vm/stack"
@@ -31,12 +33,16 @@ func NewTracerZkConfig(config Config, counterCollector *CounterCollector) ZkConf
 }
 
 func getJumpTable(cr *chain.Rules) *JumpTable {
+	// TODO: Remove this after debugging
+	log.Info(fmt.Sprintf("Warning: Debugging getJumpTable, cr.IsForkID13Dencun: %v, cr.IsForkID8Elderberry:%v", cr.IsForkID13Dencun, cr.IsForkID8Elderberry))
 	var jt *JumpTable
 	switch {
 	case cr.IsForkID13Dencun:
 		jt = &ForkId13DencunInstructionSet
+		log.Info("Warning: Debugging using ForkId13DencunInstructionSet")
 	case cr.IsForkID8Elderberry:
 		jt = &forkID8ElderberryInstructionSet
+		log.Info("Warning: Debugging using ForkId8ElderberryInstructionSet")
 	case cr.IsForkID5Dragonfruit, cr.IsForkID6IncaBerry, cr.IsForkID7Etrog:
 		jt = &forkID5DragonfruitInstructionSet
 	case cr.IsBerlin:
