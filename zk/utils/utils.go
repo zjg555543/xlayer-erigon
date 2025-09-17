@@ -105,9 +105,11 @@ func UpdateZkEVMBlockCfg(cfg ForkConfigWriter, hermezDb ForkReader, logPrefix st
 			return err
 		}
 	}
+
+	// X Layer, dencun upgrade
 	block := chain.GetForkBlock(chain.ForkId13Dencun)
 	if err := cfg.SetForkIdBlock(chain.ForkId13Dencun, block); err != nil {
-		log.Error(fmt.Sprintf("[%s] Error setting fork id %v to block %v", logPrefix, chain.ForkId13Dencun, fid[chain.ForkId13Dencun]))
+		log.Error(fmt.Sprintf("[%s] Error setting fork id %v to block %v", logPrefix, chain.ForkId13Dencun, block))
 		return err
 	}
 	return nil

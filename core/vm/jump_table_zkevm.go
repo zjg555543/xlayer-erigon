@@ -1,5 +1,9 @@
 package vm
 
+import (
+	"github.com/ledgerwatch/log/v3"
+)
+
 var (
 	forkID4InstructionSet            = newForkID4InstructionSet()
 	forkID5DragonfruitInstructionSet = newForkID5DragonfruitInstructionSet()
@@ -85,8 +89,8 @@ func newForkID8InstructionSet() JumpTable {
 
 func newForkID13DencunInstructionSet() JumpTable {
 	instructionSet := newForkID8InstructionSet()
-
 	// TODO: X Layer add the new instructions for the forkID13Dencun
+	log.Info("Warning: Debugging newForkID13DencunInstructionSet")
 
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
