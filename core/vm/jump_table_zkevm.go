@@ -85,7 +85,10 @@ func newForkID8InstructionSet() JumpTable {
 
 func newForkID13DencunInstructionSet() JumpTable {
 	instructionSet := newForkID8InstructionSet()
-	// TODO: X Layer add the new instructions for the forkID13Dencun
+	// X Layer add the new instructions for the forkID13Dencun
+	enable1153(&instructionSet) // Transient storage opcodes
+	enable5656(&instructionSet) // MCOPY opcode
+	enable6780(&instructionSet) // SELFDESTRUCT only in same transaction
 
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
