@@ -105,11 +105,11 @@ func UpdateZkEVMBlockCfg(cfg ForkConfigWriter, hermezDb ForkReader, logPrefix st
 			return err
 		}
 	}
-	if err := cfg.SetForkIdBlock(chain.ForkId13DurianDencun, fid[chain.ForkId13DurianDencun]); err != nil {
-		log.Error(fmt.Sprintf("[%s] Error setting fork id %v to block %v", logPrefix, chain.ForkId13DurianDencun, fid[chain.ForkId13DurianDencun]))
+	block := chain.GetForkBlock(chain.ForkId13Dencun)
+	if err := cfg.SetForkIdBlock(chain.ForkId13Dencun, block); err != nil {
+		log.Error(fmt.Sprintf("[%s] Error setting fork id %v to block %v", logPrefix, chain.ForkId13Dencun, fid[chain.ForkId13Dencun]))
 		return err
 	}
-	log.Info(fmt.Sprintf("[%s] Fork id blocks set", logPrefix))
 	return nil
 }
 

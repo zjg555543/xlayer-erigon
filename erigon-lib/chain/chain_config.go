@@ -29,7 +29,7 @@ import (
 // this needs to always be in descending order
 // add new forkIds at the beginning of the array
 var ForkIdsOrdered = []ForkId{
-	ForkId13DurianDencun,
+	ForkId13Dencun,
 	ForkId13Durian,
 	ForkID12Banana,
 	ForkID11,
@@ -118,7 +118,7 @@ type Config struct {
 	ForkID11                *big.Int `json:"forkID11,omitempty"`
 	ForkID12BananaBlock     *big.Int `json:"forkID12BananaBlock,omitempty"`
 	ForkId13Durian          *big.Int `json:"forkID13Durian,omitempty"`
-	ForkId13DurianDencun    *big.Int `json:"forkID13DurianDencun,omitempty"`
+	ForkId13Dencun          *big.Int `json:"ForkId13Dencun,omitempty"`
 	NormalcyBlock           *big.Int `json:"normalcyBlock,omitempty"`
 
 	AllowFreeTransactions bool   `json:"allowFreeTransactions,omitempty"`
@@ -185,8 +185,8 @@ func (c *Config) SetForkIdBlock(forkIdNumber ForkId, blockNum uint64) error {
 		c.ForkID12BananaBlock = new(big.Int).SetUint64(blockNum)
 	case ForkId13Durian:
 		c.ForkId13Durian = new(big.Int).SetUint64(blockNum)
-	case ForkId13DurianDencun:
-		c.ForkId13DurianDencun = new(big.Int).SetUint64(blockNum)
+	case ForkId13Dencun:
+		c.ForkId13Dencun = new(big.Int).SetUint64(blockNum)
 	default:
 		return fmt.Errorf("unknown fork id number %d", forkIdNumber)
 	}
@@ -391,8 +391,8 @@ func (c *Config) IsForkID13Durian(num uint64) bool {
 	return isForked(c.ForkId13Durian, num)
 }
 
-func (c *Config) IsForkID13DurianDencun(num uint64) bool {
-	return isForked(c.ForkId13DurianDencun, num)
+func (c *Config) IsForkID13Dencun(num uint64) bool {
+	return isForked(c.ForkId13Dencun, num)
 }
 
 // CheckCompatible checks whether scheduled fork transitions have been imported
@@ -632,15 +632,16 @@ func borKeyValueConfigHelper[T uint64 | common.Address](field map[string]T, numb
 // Rules is a one time interface meaning that it shouldn't be used in between transition
 // phases.
 type Rules struct {
-	ChainID                                                                                                                                                                      *big.Int
-	IsHomestead, IsTangerineWhistle, IsSpuriousDragon                                                                                                                            bool
-	IsByzantium, IsConstantinople, IsPetersburg                                                                                                                                  bool
-	IsIstanbul, IsBerlin, IsLondon, IsShanghai                                                                                                                                   bool
-	IsCancun, IsNapoli                                                                                                                                                           bool
-	IsPrague, isOsaka                                                                                                                                                            bool
-	IsAura                                                                                                                                                                       bool
-	IsNormalcy                                                                                                                                                                   bool
-	IsForkID4, IsForkID5Dragonfruit, IsForkID6IncaBerry, IsForkID7Etrog, IsForkID8Elderberry, IsForkId10, IsForkId11, IsForkID12Banana, IsForkID13Durian, IsForkID13DurianDencun bool
+	ChainID                                                                                                                                              *big.Int
+	IsHomestead, IsTangerineWhistle, IsSpuriousDragon                                                                                                    bool
+	IsByzantium, IsConstantinople, IsPetersburg                                                                                                          bool
+	IsIstanbul, IsBerlin, IsLondon, IsShanghai                                                                                                           bool
+	IsCancun, IsNapoli                                                                                                                                   bool
+	IsPrague, isOsaka                                                                                                                                    bool
+	IsAura                                                                                                                                               bool
+	IsNormalcy                                                                                                                                           bool
+	IsForkID4, IsForkID5Dragonfruit, IsForkID6IncaBerry, IsForkID7Etrog, IsForkID8Elderberry, IsForkId10, IsForkId11, IsForkID12Banana, IsForkID13Durian bool
+	IsForkID13Dencun                                                                                                                                     bool
 }
 
 // Rules ensures c's ChainID is not nil and returns a new Rules instance
@@ -651,33 +652,33 @@ func (c *Config) Rules(num uint64, time uint64) *Rules {
 	}
 
 	return &Rules{
-		ChainID:                new(big.Int).Set(chainID),
-		IsHomestead:            c.IsHomestead(num),
-		IsTangerineWhistle:     c.IsTangerineWhistle(num),
-		IsSpuriousDragon:       c.IsSpuriousDragon(num),
-		IsByzantium:            c.IsByzantium(num),
-		IsConstantinople:       c.IsConstantinople(num),
-		IsPetersburg:           c.IsPetersburg(num),
-		IsIstanbul:             c.IsIstanbul(num),
-		IsBerlin:               c.IsBerlin(num),
-		IsLondon:               c.IsLondon(num),
-		IsShanghai:             c.IsShanghai(time) || c.IsAgra(num),
-		IsCancun:               c.IsCancun(time),
-		IsNapoli:               c.IsNapoli(num),
-		IsPrague:               c.IsPrague(time),
-		isOsaka:                c.IsOsaka(time),
-		IsNormalcy:             c.IsNormalcy(num),
-		IsAura:                 c.Aura != nil,
-		IsForkID4:              c.IsForkID4(num),
-		IsForkID5Dragonfruit:   c.IsForkID5Dragonfruit(num),
-		IsForkID6IncaBerry:     c.IsForkID6IncaBerry(num),
-		IsForkID7Etrog:         c.IsForkID7Etrog(num),
-		IsForkID8Elderberry:    c.IsForkID8Elderberry(num),
-		IsForkId10:             c.IsForkID10(num),
-		IsForkId11:             c.IsForkID11(num),
-		IsForkID12Banana:       c.IsForkID12Banana(num),
-		IsForkID13Durian:       c.IsForkID13Durian(num),
-		IsForkID13DurianDencun: c.IsForkID13DurianDencun(num),
+		ChainID:              new(big.Int).Set(chainID),
+		IsHomestead:          c.IsHomestead(num),
+		IsTangerineWhistle:   c.IsTangerineWhistle(num),
+		IsSpuriousDragon:     c.IsSpuriousDragon(num),
+		IsByzantium:          c.IsByzantium(num),
+		IsConstantinople:     c.IsConstantinople(num),
+		IsPetersburg:         c.IsPetersburg(num),
+		IsIstanbul:           c.IsIstanbul(num),
+		IsBerlin:             c.IsBerlin(num),
+		IsLondon:             c.IsLondon(num),
+		IsShanghai:           c.IsShanghai(time) || c.IsAgra(num),
+		IsCancun:             c.IsCancun(time),
+		IsNapoli:             c.IsNapoli(num),
+		IsPrague:             c.IsPrague(time),
+		isOsaka:              c.IsOsaka(time),
+		IsNormalcy:           c.IsNormalcy(num),
+		IsAura:               c.Aura != nil,
+		IsForkID4:            c.IsForkID4(num),
+		IsForkID5Dragonfruit: c.IsForkID5Dragonfruit(num),
+		IsForkID6IncaBerry:   c.IsForkID6IncaBerry(num),
+		IsForkID7Etrog:       c.IsForkID7Etrog(num),
+		IsForkID8Elderberry:  c.IsForkID8Elderberry(num),
+		IsForkId10:           c.IsForkID10(num),
+		IsForkId11:           c.IsForkID11(num),
+		IsForkID12Banana:     c.IsForkID12Banana(num),
+		IsForkID13Durian:     c.IsForkID13Durian(num),
+		IsForkID13Dencun:     c.IsForkID13Dencun(num),
 	}
 }
 

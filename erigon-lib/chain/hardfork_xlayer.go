@@ -18,7 +18,6 @@ package chain
 
 import (
 	"fmt"
-	"math/big"
 
 	"github.com/ledgerwatch/log/v3"
 )
@@ -35,57 +34,53 @@ const (
 
 // XLayerForkConfig defines hard fork activation blocks for different networks
 type XLayerForkConfig struct {
-	MainnetBlock *big.Int
-	TestnetBlock *big.Int
-	DevnetBlock  *big.Int
+	MainnetBlock uint64
+	TestnetBlock uint64
+	DevnetBlock  uint64
 }
 
 // Fork configurations
-var ForkId13DurianDencunConfig = XLayerForkConfig{
-	MainnetBlock: big.NewInt(5000000),
-	TestnetBlock: big.NewInt(3000000),
-	DevnetBlock:  big.NewInt(100),
+var ForkId13DencunConfig = XLayerForkConfig{
+	MainnetBlock: 1000000000000, // TODO, need to be updated
+	TestnetBlock: 1000000000000, // TODO, need to be updated
+	DevnetBlock:  1,
 }
 
 // Fork configurations registry
 var forkConfigs = map[ForkId]XLayerForkConfig{
-	ForkId13DurianDencun: ForkId13DurianDencunConfig,
+	ForkId13Dencun: ForkId13DencunConfig,
 	// Quickly add new fork configurations
 }
 
-// Network identification by sequencer address
+// Network identification by zkevm address
 var zkevmAddressNetworkMap = map[string]NetworkType{
-	"0x2B0ee28D4D51bC9aDde5E58E295873F61F4a0507": MainnetNetwork, // X Layer mainnet sequencer
-	"0x7b1472be9a0115c3076b9f30e6bab91b13b3be6b": TestnetNetwork, // X Layer testnet sequencer
-	"0xE45CCD0757670580a4a3600DE5cef1e45F0Ec2bd": LocalNetwork,   // Local sequencer
+	"0x2B0ee28D4D51bC9aDde5E58E295873F61F4a0507": MainnetNetwork, // Mainnet
+	"0x7b1472be9a0115c3076b9f30e6bab91b13b3be6b": TestnetNetwork, // Testnet
+	"0xE45CCD0757670580a4a3600DE5cef1e45F0Ec2bd": LocalNetwork,   // Local
 }
 
 // Global state
 var currentNetwork NetworkType = UnknownNetwork
 
 // InitializeNetworkByZkevmAddress sets the current network based on zkevm address
-func InitializeNetworkByZkevmAddress(sequencerAddr string) {
-	if network, exists := zkevmAddressNetworkMap[sequencerAddr]; exists {
+func InitializeNetworkByZkevmAddress(zkevmAddr string) {
+	if network, exists := zkevmAddressNetworkMap[zkevmAddr]; exists {
 		currentNetwork = network
 	} else {
 		currentNetwork = UnknownNetwork
 	}
+	log.Info(fmt.Sprintf("Current network: %v, zkevmAddr: %v", currentNetwork, zkevmAddr))
 	for key, _ := range forkConfigs {
 		block := GetForkBlock(key)
-		log.Info(fmt.Sprintf("Current network: %v, sequencerAddr: %v, ForkId13DurianDencun:%v block: %v", currentNetwork, sequencerAddr, key, block))
+		log.Info(fmt.Sprintf("Network: %v, zkevmAddr: %v, ForkId13Dencun:%v block: %v", currentNetwork, zkevmAddr, key, block))
 	}
 }
 
-// RegisterFork allows registering new fork configurations dynamically
-func RegisterFork(forkID ForkId, config XLayerForkConfig) {
-	forkConfigs[forkID] = config
-}
-
 // GetForkBlock returns the activation block for a given fork ID
-func GetForkBlock(forkID ForkId) *big.Int {
+func GetForkBlock(forkID ForkId) uint64 {
 	config, exists := forkConfigs[forkID]
 	if !exists {
-		return nil
+		return 0
 	}
 
 	switch currentNetwork {
@@ -96,6 +91,6 @@ func GetForkBlock(forkID ForkId) *big.Int {
 	case LocalNetwork:
 		return config.DevnetBlock
 	default:
-		return nil // Unknown network
+		return 0 // Unknown network
 	}
 }

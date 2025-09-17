@@ -1,10 +1,11 @@
 package vm
 
 var (
-	forkID4InstructionSet              = newForkID4InstructionSet()
-	forkID5DragonfruitInstructionSet   = newForkID5DragonfruitInstructionSet()
-	forkID8ElderberryInstructionSet    = newForkID8InstructionSet()
-	ForkId13DurianDencunInstructionSet = newForkID13DurianDencunInstructionSet()
+	forkID4InstructionSet            = newForkID4InstructionSet()
+	forkID5DragonfruitInstructionSet = newForkID5DragonfruitInstructionSet()
+	forkID8ElderberryInstructionSet  = newForkID8InstructionSet()
+
+	ForkId13DencunInstructionSet = newForkID13DencunInstructionSet()
 )
 
 // newForkID4InstructionSet returns the instruction set for the forkID4
@@ -82,10 +83,10 @@ func newForkID8InstructionSet() JumpTable {
 	return instructionSet
 }
 
-func newForkID13DurianDencunInstructionSet() JumpTable {
+func newForkID13DencunInstructionSet() JumpTable {
 	instructionSet := newForkID8InstructionSet()
 
-	// TODO: X Layer add the new instructions for the forkID13DurianDencun
+	// TODO: X Layer add the new instructions for the forkID13Dencun
 
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet

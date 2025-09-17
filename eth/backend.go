@@ -1210,6 +1210,9 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			dataStreamServer = dataStreamServerFactory.CreateDataStreamServer(backend.streamServer, backend.chainConfig.ChainID.Uint64())
 		}
 
+		// For X Layer, dencun upgrade
+		chain.InitializeNetworkByZkevmAddress(cfg.AddressZkevm.Hex())
+
 		if isSequencer {
 			// if we are sequencing transactions, we do the sequencing loop...
 

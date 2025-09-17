@@ -14,7 +14,8 @@ const (
 	ForkID11
 	ForkID12Banana
 	ForkId13Durian
-	ForkId13DurianDencun = 100 // Dencun upgrade on top of Durian
+
+	ForkId13Dencun = 100 // Dencun upgrade on top of Durian
 
 	// ImpossibleForkId is a fork ID that is greater than any possible fork ID
 	// Nothing should be added after this line
