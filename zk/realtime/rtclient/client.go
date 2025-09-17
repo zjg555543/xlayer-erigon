@@ -1,7 +1,6 @@
 package rtclient
 
 import (
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -9,7 +8,6 @@ import (
 	"math/big"
 	"strconv"
 
-	ethereum "github.com/ledgerwatch/erigon"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -416,35 +414,24 @@ func (rc *RealtimeClient) RealtimeGetTokenBalance(
 	return balance, nil
 }
 
-func (rc *RealtimeClient) EthGetTokenBalance(
-	ctx context.Context,
-	addr common.Address,
-	erc20Addr common.Address,
-	height *big.Int,
-) (*big.Int, error) {
-	// Pack the balanceOf function call
-	data, err := erc20ABI.Pack("balanceOf", addr)
+func (rc *RealtimeClient) RealtimeGetBlock(tag string) (map[string]interface{}, error) {
+	// Call eth_getBlockByNumber with fullTx=true to get full transaction details
+	fullTx := true
+	response, err := client.JSONRPCCall(rc.url, "eth_getBlockByNumber", tag, fullTx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to pack balanceOf call: %v", err)
+		return nil, err
+	}
+	if response.Error != nil {
+		return nil, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
 	}
 
-	// Make the eth_call
-	result, err := rc.CallContract(ctx, ethereum.CallMsg{
-		To:   &erc20Addr,
-		Data: data,
-	}, height)
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
 	if err != nil {
-		return nil, fmt.Errorf("failed to call contract: %v", err)
+		return nil, err
 	}
 
-	// Unpack the result
-	var balance *big.Int
-	err = erc20ABI.UnpackIntoInterface(&balance, "balanceOf", result)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unpack result: %v", err)
-	}
-
-	return balance, nil
+	return result, nil
 }
 
 func (rc *RealtimeClient) RealtimeGetBlockByNumber(blockNumber uint64) (map[string]interface{}, error) {
