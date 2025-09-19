@@ -809,13 +809,19 @@ func findCommonAncestorByReverse(
 	if latestBlockNum == 0 {
 		return 0, emptyHash, ErrFailedToFindCommonAncestor
 	}
-	maxStep := latestBlockNum
-	for step := uint64(1); step <= maxStep; step *= 2 {
+	var lastTestedBlock uint64
+
+	for step := uint64(1); step <= latestBlockNum; step *= 2 {
 		if latestBlockNum <= step {
-			continue
+			if lastTestedBlock > 1 {
+				return binarySearchInRange(cfg, db, hermezDb, blockReaderRpc, 1, lastTestedBlock-1)
+			}
+			break
 		}
 
 		testBlock := latestBlockNum - step
+		lastTestedBlock = testBlock
+
 		matches, err := isBlockMatching(cfg, db, hermezDb, blockReaderRpc, testBlock)
 		if err != nil {
 			return 0, emptyHash, fmt.Errorf("isBlockMatching failed for block %d: %w", testBlock, err)
@@ -827,7 +833,7 @@ func findCommonAncestorByReverse(
 		}
 	}
 
-	log.Error("Exponential search failed to find any common ancestor", "maxStep", maxStep, "latestBlockNum", latestBlockNum)
+	log.Error("Exponential search failed to find any common ancestor", "latestBlockNum", latestBlockNum)
 	return 0, emptyHash, ErrFailedToFindCommonAncestor
 }
 
