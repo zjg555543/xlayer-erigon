@@ -203,7 +203,7 @@ func TestFindCommonAncestor(t *testing.T) {
 			}
 
 			// ACT
-			ancestorNum, ancestorHash, err := findCommonAncestor(cfg, erigonDb, hermezDb, reader, tc.latestBlockNum)
+			ancestorNum, ancestorHash, err := findCommonAncestorByReverse(cfg, erigonDb, hermezDb, reader, tc.latestBlockNum)
 
 			// ASSERT
 			if tc.expectedError != nil {
