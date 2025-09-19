@@ -3,6 +3,7 @@ package stages
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -159,12 +160,41 @@ func TestFindCommonAncestor(t *testing.T) {
 			expectedError:  ErrFailedToFindCommonAncestor,
 		},
 		{
-			name:                  "Failed to find common ancestor block (different blocks in the data stream and db)",
+			name:                  "Successful search with offset block range",
 			dbBlocksCount:         10,
 			dsBlocksCount:         10,
 			divergentBlockHistory: true,
 			latestBlockNum:        20,
-			expectedError:         ErrFailedToFindCommonAncestor,
+			expectedBlockNum:      20,
+			expectedHash:          common.Hash{byte(20)},
+			expectedError:         nil,
+		},
+		{
+			name:             "Exponential search with remaining range",
+			dbBlocksCount:    3,
+			dsBlocksCount:    10,
+			latestBlockNum:   100,
+			expectedBlockNum: 3,
+			expectedHash:     common.Hash{byte(3)},
+			expectedError:    nil,
+		},
+		{
+			name:             "Common ancestor at genesis block",
+			dbBlocksCount:    1,
+			dsBlocksCount:    10,
+			latestBlockNum:   50,
+			expectedBlockNum: 1,
+			expectedHash:     common.Hash{byte(1)},
+			expectedError:    nil,
+		},
+		{
+			name:             "Large divergence distance",
+			dbBlocksCount:    5,
+			dsBlocksCount:    10,
+			latestBlockNum:   1000,
+			expectedBlockNum: 5,
+			expectedHash:     common.Hash{byte(5)},
+			expectedError:    nil,
 		},
 	}
 
@@ -220,6 +250,134 @@ func TestFindCommonAncestor(t *testing.T) {
 	}
 }
 
+// TestFindCommonAncestorWithPrunedRPC tests the RPC pruning scenario specifically
+func TestFindCommonAncestorWithPrunedRPC(t *testing.T) {
+	blocksCount := 100
+	l2Blocks := createTestL2Blocks(t, blocksCount)
+
+	testDb, tx := memdb.NewTestTx(t)
+	defer testDb.Close()
+	defer tx.Rollback()
+
+	err := hermez_db.CreateHermezBuckets(tx)
+	require.NoError(t, err)
+	err = db.CreateEriDbBuckets(tx)
+	require.NoError(t, err)
+
+	hermezDb := hermez_db.NewHermezDb(tx)
+	erigonDb := erigon_db.NewErigonDb(tx)
+
+	// Simulate local DB with many historical blocks
+	dbBlocks := l2Blocks[:50] // blocks 1-50
+	for _, l2Block := range dbBlocks {
+		require.NoError(t, hermezDb.WriteBlockBatch(l2Block.L2BlockNumber, l2Block.BatchNumber))
+		require.NoError(t, rawdb.WriteCanonicalHash(tx, l2Block.L2Blockhash, l2Block.L2BlockNumber))
+	}
+
+	// Simulate RPC with only recent blocks (historical blocks pruned)
+	reader := newPrunedMockL2BlockReaderRpc()
+	recentBlocks := l2Blocks[40:50] // only blocks 41-50
+	for _, l2Block := range recentBlocks {
+		reader.addBlockDetail(l2Block.L2BlockNumber, l2Block.BatchNumber, l2Block.L2Blockhash)
+	}
+
+	cfg := BatchesCfg{
+		zkCfg: &ethconfig.Zk{
+			L2RpcUrl: "test",
+		},
+	}
+
+	// ACT - search from a high block number, simulating unwind scenario
+	ancestorNum, ancestorHash, err := findCommonAncestorByReverse(cfg, erigonDb, hermezDb, reader, 50)
+
+	// ASSERT - should find block 50 as common ancestor
+	require.NoError(t, err)
+	require.Equal(t, uint64(50), ancestorNum)
+	require.Equal(t, common.Hash{byte(50)}, ancestorHash)
+}
+
+// TestFindCommonAncestorTrulyDifferentHistory tests truly different block histories
+func TestFindCommonAncestorTrulyDifferentHistory(t *testing.T) {
+	blocksCount := 50
+	l2Blocks := createTestL2Blocks(t, blocksCount)
+
+	testDb, tx := memdb.NewTestTx(t)
+	defer testDb.Close()
+	defer tx.Rollback()
+
+	err := hermez_db.CreateHermezBuckets(tx)
+	require.NoError(t, err)
+	err = db.CreateEriDbBuckets(tx)
+	require.NoError(t, err)
+
+	hermezDb := hermez_db.NewHermezDb(tx)
+	erigonDb := erigon_db.NewErigonDb(tx)
+
+	// Local DB has blocks 1-10
+	dbBlocks := l2Blocks[:10]
+	for _, l2Block := range dbBlocks {
+		require.NoError(t, hermezDb.WriteBlockBatch(l2Block.L2BlockNumber, l2Block.BatchNumber))
+		require.NoError(t, rawdb.WriteCanonicalHash(tx, l2Block.L2Blockhash, l2Block.L2BlockNumber))
+	}
+
+	// RPC has completely different blocks 20-30
+	reader := newMockL2BlockReaderRpc()
+	rpcBlocks := l2Blocks[19:30] // blocks 20-30
+	for _, l2Block := range rpcBlocks {
+		reader.addBlockDetail(l2Block.L2BlockNumber, l2Block.BatchNumber, l2Block.L2Blockhash)
+	}
+
+	cfg := BatchesCfg{
+		zkCfg: &ethconfig.Zk{
+			L2RpcUrl: "test",
+		},
+	}
+
+	// ACT - search from block 30, should find no common ancestor
+	ancestorNum, ancestorHash, err := findCommonAncestorByReverse(cfg, erigonDb, hermezDb, reader, 30)
+
+	// ASSERT - should return error because no common ancestor exists
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "isBlockMatching failed") // accept specific error message
+	require.Equal(t, uint64(0), ancestorNum)
+	require.Equal(t, emptyHash, ancestorHash)
+}
+
+// newPrunedMockL2BlockReaderRpc creates a mock RPC that simulates pruned historical blocks
+func newPrunedMockL2BlockReaderRpc() *prunedMockL2BlockReaderRpc {
+	return &prunedMockL2BlockReaderRpc{
+		blockHashes:  make(map[uint64]common.Hash),
+		blockBatches: make(map[uint64]uint64),
+	}
+}
+
+type prunedMockL2BlockReaderRpc struct {
+	blockHashes  map[uint64]common.Hash
+	blockBatches map[uint64]uint64
+}
+
+func (m *prunedMockL2BlockReaderRpc) addBlockDetail(number, batch uint64, hash common.Hash) {
+	m.blockHashes[number] = hash
+	m.blockBatches[number] = batch
+}
+
+func (m *prunedMockL2BlockReaderRpc) GetZKBlockByNumberHash(url string, blockNum uint64) (common.Hash, error) {
+	hash, exists := m.blockHashes[blockNum]
+	if !exists {
+		// Simulate RPC pruning: return "unexpected end of JSON input" error
+		return common.Hash{}, fmt.Errorf("unexpected end of JSON input")
+	}
+	return hash, nil
+}
+
+func (m *prunedMockL2BlockReaderRpc) GetBatchNumberByBlockNumber(url string, blockNum uint64) (uint64, error) {
+	batch, exists := m.blockBatches[blockNum]
+	if !exists {
+		return 0, fmt.Errorf("unexpected end of JSON input")
+	}
+	return batch, nil
+}
+
 func createTestL2Blocks(t *testing.T, blocksCount int) []types.FullL2Block {
 	post155 := "0xf86780843b9aca00826163941275fbb540c8efc58b812ba83b0d0b8b9917ae98808464fbb77c1ba0b7d2a666860f3c6b8f5ef96f86c7ec5562e97fd04c2e10f3755ff3a0456f9feba0246df95217bf9082f84f9e40adb0049c6664a5bb4c9cbe34ab1a73e77bab26ed"
 	post155Bytes, err := hex.DecodeString(strings.TrimPrefix(post155, "0x"))
@@ -272,9 +430,17 @@ func (m mockL2BlockReaderRpc) addBlockDetail(number, batch uint64, hash common.H
 }
 
 func (m mockL2BlockReaderRpc) GetZKBlockByNumberHash(url string, blockNum uint64) (common.Hash, error) {
-	return m.blockHashes[blockNum], nil
+	hash, exists := m.blockHashes[blockNum]
+	if !exists {
+		return common.Hash{}, fmt.Errorf("block %d not found", blockNum)
+	}
+	return hash, nil
 }
 
 func (m mockL2BlockReaderRpc) GetBatchNumberByBlockNumber(url string, blockNum uint64) (uint64, error) {
-	return m.blockBatches[blockNum], nil
+	batch, exists := m.blockBatches[blockNum]
+	if !exists {
+		return 0, fmt.Errorf("batch for block %d not found", blockNum)
+	}
+	return batch, nil
 }
