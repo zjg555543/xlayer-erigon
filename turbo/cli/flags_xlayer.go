@@ -105,6 +105,7 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		EnableLatestDataStreamBlockNumberGlobalVariableForRpc: ctx.Bool(utils.EnableLatestDataStreamBlockNumberGlobalVariableForRpc.Name),
 		DataStreamUnwindToBlock:                               ctx.Uint64(utils.DataStreamUnwindToBlock.Name),
 		SyncSeqLogs:                                           ctx.Bool(utils.SyncSeqLogs.Name),
+		SequencerPaused:                                       ctx.Bool(utils.SequencerPaused.Name),
 	}
 	if cfg.XLayer.BlockInfoConcurrent {
 		blockinfo.SetUseBlockInfoTree(true)

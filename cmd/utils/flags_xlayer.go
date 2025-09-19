@@ -462,6 +462,11 @@ var (
 		Usage: "sync sequencer logs",
 		Value: false,
 	}
+	SequencerPaused = cli.BoolFlag{
+		Name:  "zkevm.sequencer-paused",
+		Usage: "Whether the sequencer is paused (true) or active (false). Can be controlled via Apollo config.",
+		Value: false,
+	}
 )
 
 func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {

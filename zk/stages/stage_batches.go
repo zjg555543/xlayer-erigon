@@ -171,17 +171,21 @@ func SpawnStageBatches(
 	}
 
 	// get batch for batches progress
+	getBatchNoByL2Blockstart := time.Now()
 	stageProgressBatchNo, err := hermezDb.GetBatchNoByL2Block(stageProgressBlockNo)
 	if err != nil && !errors.Is(err, hermez_db.ErrorNotStored) {
 		return fmt.Errorf("GetBatchNoByL2Block: %w", err)
 	}
+	getBatchNoByL2BlockCost := time.Since(getBatchNoByL2Blockstart)
 
 	startSyncTime := time.Now()
 
+	getForkIdstart := time.Now()
 	latestForkId, err := stages.GetStageProgress(tx, stages.ForkId)
 	if err != nil {
 		return fmt.Errorf("GetStageProgress: %w", err)
 	}
+	getForkIdCost := time.Since(getForkIdstart)
 
 	dsQueryClient, stopDsClient, err := newStreamClient(ctx, cfg, latestForkId)
 	if err != nil {
@@ -197,6 +201,9 @@ func SpawnStageBatches(
 	var highestDSL2Block uint64
 	newBlockCheckStartTIme := time.Now()
 	newBlockCheckCounter := 0
+	getHighestDSL2Blockstart := time.Now()
+	getHighestDSL2BlockCounter := 0
+	var stats getHighestDSL2BlockStats
 	for {
 		select {
 		case <-ctx.Done():
@@ -204,7 +211,8 @@ func SpawnStageBatches(
 		default:
 		}
 
-		highestDSL2Block, err = getHighestDSL2Block(ctx, cfg, uint16(latestForkId))
+		getHighestDSL2BlockCounter++
+		highestDSL2Block, err = getHighestDSL2Block(logPrefix, ctx, cfg, uint16(latestForkId), &stats)
 		if err != nil {
 			// if we return error, stage will replay and block all other stages
 			log.Warn(fmt.Sprintf("[%s] Failed to get latest l2 block from datastream: %v", logPrefix, err))
@@ -232,6 +240,7 @@ func SpawnStageBatches(
 		// For X Layer
 		time.Sleep(5 * time.Millisecond)
 	}
+	getHighestDSL2BlockCost := time.Since(getHighestDSL2Blockstart)
 
 	log.Debug(fmt.Sprintf("[%s] Highest block in db and datastream", logPrefix), "datastreamBlock", highestDSL2Block, "dbBlock", stageProgressBlockNo)
 	unwindFn := func(unwindBlock uint64) (uint64, error) {
@@ -377,7 +386,7 @@ func SpawnStageBatches(
 
 	// stop printing blocks written progress routine
 	elapsed := time.Since(startSyncTime)
-	log.Info(fmt.Sprintf("[%s] Finished writing blocks", logPrefix), "blocksWritten", batchProcessor.TotalBlocksWritten(), "elapsed", elapsed)
+	log.Info(fmt.Sprintf("[%s] Finished writing blocks", logPrefix), "blocksWritten", batchProcessor.TotalBlocksWritten(), "elapsed", elapsed, "getHighestDSL2BlockCounter", getHighestDSL2BlockCounter, "getHighestDSL2BlockCost", getHighestDSL2BlockCost, "getHighestDSL2BlockStats", stats.toString(), "getBatchNoByL2BlockCost", getBatchNoByL2BlockCost, "getForkIdCost", getForkIdCost)
 
 	if freshTx {
 		if err := tx.Commit(); err != nil {
@@ -844,13 +853,32 @@ func newStreamClient(ctx context.Context, cfg BatchesCfg, latestForkId uint64) (
 	return dsClient, stopFn, nil
 }
 
-func getHighestDSL2Block(ctx context.Context, batchCfg BatchesCfg, latestFork uint16) (uint64, error) {
+type getHighestDSL2BlockStats struct {
+	getSeqCost        time.Duration
+	getSeqCounter     int
+	dsStart           time.Duration
+	dsStartCounter    int
+	dsGetBlockCost    time.Duration
+	dsGetBlockCounter int
+	dsStopCost        time.Duration
+	dsStopCounter     int
+}
+
+func (stats getHighestDSL2BlockStats) toString() string {
+	return fmt.Sprintf("getHighestDSL2BlockStats {getSeqCost: %v, getSeqCounter: %d, dsStart: %v, dsStartCounter: %d, dsGetBlockCost: %v, dsGetBlockCounter: %d, dsStopCost: %v, dsStopCounter: %d}",
+		stats.getSeqCost, stats.getSeqCounter, stats.dsStart, stats.dsStartCounter, stats.dsGetBlockCost, stats.dsGetBlockCounter, stats.dsStopCost, stats.dsStopCounter)
+}
+
+func getHighestDSL2Block(logPrefix string, ctx context.Context, batchCfg BatchesCfg, latestFork uint16, stats *getHighestDSL2BlockStats) (uint64, error) {
 	cfg := batchCfg.zkCfg
 
 	// first try the sequencer rpc endpoint, it might not have been upgraded to the
 	// latest version yet so if we get an error back from this call we can try the older
 	// method of calling the datastream directly
+	getSeqStart := time.Now()
 	highestBlock, err := GetSequencerHighestDataStreamBlock(cfg.L2RpcUrl)
+	stats.getSeqCost += time.Since(getSeqStart)
+	stats.getSeqCounter += 1
 	if err == nil {
 		return highestBlock, nil
 	}
@@ -859,16 +887,26 @@ func getHighestDSL2Block(ctx context.Context, batchCfg BatchesCfg, latestFork ui
 	// but we're going to open a new connection rather than use the one for syncing blocks.
 	// This is so we can keep the logic simple and just dispose of the connection when we're done
 	// greatly simplifying state juggling of the connection if it errors
+	getDSStart := time.Now()
 	dsClient := buildNewStreamClient(ctx, batchCfg, latestFork)
-	if err = dsClient.Start(); err != nil {
+	err = dsClient.Start()
+	stats.dsStart += time.Since(getDSStart)
+	stats.dsStartCounter += 1
+	if err != nil {
 		return 0, err
 	}
 	defer func() {
+		dsStopStart := time.Now()
 		if err := dsClient.Stop(); err != nil {
 			log.Error("problem stopping datastream client looking up latest ds l2 block", "err", err)
 		}
+		stats.dsStopCost += time.Since(dsStopStart)
+		stats.dsStopCounter += 1
 	}()
+	dsGetlockStart := time.Now()
 	fullBlock, err := dsClient.GetLatestL2Block()
+	stats.dsGetBlockCost += time.Since(dsGetlockStart)
+	stats.dsGetBlockCounter += 1
 	if err != nil {
 		return 0, err
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/node/nodecfg"
+	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/log/v3"
 	"github.com/urfave/cli/v2"
 )
@@ -34,6 +35,7 @@ func (c *Client) fireSequencer(ctx *cli.Context, value *storage.ConfigChange) {
 
 	// Set sequencer flag on fire configuration changes
 	setSequencerFlag()
+	sequencer.SetPaused(ctx.Bool(utils.SequencerPaused.Name))
 }
 
 // loadSequencerConfig loads the dynamic sequencer apollo configurations
@@ -135,6 +137,9 @@ func loadEthSequencerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 		for i, addr := range addrHexes {
 			ethCfg.Zk.XLayer.BridgeIntercept.WhitelistAddresses[i] = libcommon.HexToAddress(addr)
 		}
+	}
+	if ctx.IsSet(utils.SequencerPaused.Name) {
+		ethCfg.Zk.XLayer.SequencerPaused = ctx.Bool(utils.SequencerPaused.Name)
 	}
 
 	// For OkPay

@@ -395,4 +395,6 @@ var DefaultFlags = []cli.Flag{
 	&utils.EnableLatestDataStreamBlockNumberGlobalVariableForRpc,
 	&utils.DataStreamUnwindToBlock,
 	&utils.SyncSeqLogs,
+
+	&utils.SequencerPaused,
 }

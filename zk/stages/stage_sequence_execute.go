@@ -21,6 +21,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/metrics"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
+	"github.com/ledgerwatch/erigon/zk/sequencer"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	"github.com/ledgerwatch/erigon/zk/utils"
@@ -924,6 +925,16 @@ BatchLoop:
 		// For X Layer
 		metrics.GetLogStatistics().SetTag(metrics.FinalizeBlockNumber, strconv.Itoa(int(blockNumber)))
 		metrics.GetLogStatistics().SummaryCheckpoint()
+
+		// Check if sequencer is paused after processing this block
+		if sequencer.IsPaused() {
+			log.Info(fmt.Sprintf("[%s] Sequencer is paused, waiting for resume signal...", logPrefix))
+			// Hang here and wait for resume signal
+			for sequencer.IsPaused() {
+				time.Sleep(2 * time.Second) // Check every second
+			}
+			log.Info(fmt.Sprintf("[%s] Sequencer resumed, continuing batch processing", logPrefix))
+		}
 
 		if breakBatchLoop {
 			break BatchLoop

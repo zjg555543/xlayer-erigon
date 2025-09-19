@@ -20,7 +20,6 @@ import (
 
 	"github.com/ledgerwatch/erigon/consensus/misc"
 	"github.com/ledgerwatch/erigon/core"
-	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 
@@ -276,12 +275,18 @@ func getExecRange(cfg ExecuteBlockCfg, tx kv.RwTx, stageProgress, toBlock uint64
 		return to, total, nil
 	}
 
-	shouldShortCircuit, noProgressTo, err := utils.ShouldShortCircuitExecution(tx, logPrefix, cfg.zk.L2ShortCircuitToVerifiedBatch, func(tx kv.Tx) (uint64, error) {
-		return rpchelper.GetFinalizedBatchNumber(tx)
-	})
-	if err != nil {
-		return 0, 0, fmt.Errorf("ShouldShortCircuitExecution: %w", err)
-	}
+	/*
+		// X Layer: we do not roll up on L1 for RPC nodes anymore. Therefore, we no longer
+		// short-circuit execution to the L1 verified batch. Instead, we execute directly
+		// using the blocks downloaded from the DataStream, ignoring L1 verified batch
+		// boundaries here.
+		shouldShortCircuit, noProgressTo, err := utils.ShouldShortCircuitExecution(tx, logPrefix, cfg.zk.L2ShortCircuitToVerifiedBatch, func(tx kv.Tx) (uint64, error) {
+			return rpchelper.GetFinalizedBatchNumber(tx)
+		})
+		if err != nil {
+			return 0, 0, fmt.Errorf("ShouldShortCircuitExecution: %w", err)
+		}
+	*/
 	prevStageProgress, err := stages.GetStageProgress(tx, stages.Senders)
 	if err != nil {
 		return 0, 0, fmt.Errorf("getStageProgress: %w", err)
@@ -297,9 +302,9 @@ func getExecRange(cfg ExecuteBlockCfg, tx kv.RwTx, stageProgress, toBlock uint64
 		to = cmp.Min(prevStageProgress, toBlock)
 	}
 
-	if shouldShortCircuit {
-		to = noProgressTo
-	}
+	// if shouldShortCircuit {
+	// 	to = noProgressTo
+	// }
 
 	total := to - stageProgress
 
