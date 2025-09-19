@@ -813,8 +813,8 @@ func findCommonAncestorByReverse(
 
 	for step := uint64(1); step <= latestBlockNum; step *= 2 {
 		if latestBlockNum <= step {
-			if lastTestedBlock > 1 {
-				return binarySearchInRange(cfg, db, hermezDb, blockReaderRpc, 1, lastTestedBlock-1)
+			if lastTestedBlock > 0 {
+				return binarySearchInRange(cfg, db, hermezDb, blockReaderRpc, 0, lastTestedBlock-1)
 			}
 			break
 		}
