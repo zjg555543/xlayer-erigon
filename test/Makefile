@@ -253,7 +253,7 @@ test-e2e-prune: stop all ## Runs group xlayer feature e2e tests checking race co
 test-dencun-e2e: stop all
 	sleep 3
 	cd ../ && ./zk/tests/dencun/dencun.sh --expect-no-hardfork && cd -
-	sleep 30
+	sleep 60
 	docker ps -a
 	cd ../ && ./zk/tests/dencun/dencun.sh && cd -
 	trap '$(STOP)' EXIT; MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 600s ../ci/e2e-1/...

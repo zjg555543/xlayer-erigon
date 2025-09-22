@@ -81,6 +81,7 @@ echo "Current block: $(cast block-number --rpc-url $RPC_URL)"
 # EIP-4758: https://eips.ethereum.org/EIPS/eip-4758 Call SENDALL instead
 # ------------------------------------
 testSendAllEIP4758EIP6780() {
+    echo "Before testSendAllEIP4758EIP6780, current block: $(cast block-number --rpc-url $RPC_URL)"
     local RPC_URL=$1
     local RECIPIENT=0x0123456789abcdef0123456789abcdef01234567
     $RUNDIR/test_selfdestruct.sh --rpc-url $RPC_URL --private-key $PRIVATE_KEY --recipient $RECIPIENT --contract $CONTRACTS_DIR/contracts/selfdestruct.sol:SelfDestruct
@@ -95,6 +96,7 @@ testSendAllEIP4758EIP6780() {
 # EIP 4844: https://eips.ethereum.org/EIPS/eip-4844 Point eval precompile only (L2 does not support blobs)
 # ------------------------------------
 testPointEvalPrecompileEIP4844() {
+    echo "Before testPointEvalPrecompileEIP4844, current block: $(cast block-number --rpc-url $RPC_URL)"
     local RPC_URL=$1
     $RUNDIR/test_precompile_prague_pointeval.sh --rpc-url $RPC_URL
 
@@ -125,6 +127,7 @@ testPointEvalPrecompileEIP4844() {
 # EIP 5656: https://eips.ethereum.org/EIPS/eip-5656 MCOPY
 # ------------------------------------
 testMCopyEIP5656() {
+    echo "Before testMCopyEIP5656, current block: $(cast block-number --rpc-url $RPC_URL)"
     local RPC_URL=$1
     # Change to test contracts directory to avoid OpenZeppelin dependency issues
     cd $CONTRACTS_DIR
@@ -168,6 +171,7 @@ testMCopyEIP5656() {
 # EIP 1153: https://eips.ethereum.org/EIPS/eip-1153 Transient storage
 # ------------------------------------
 testTransientStorageEIP1153() {
+    echo "Before testTransientStorageEIP1153, current block: $(cast block-number --rpc-url $RPC_URL)"
     local RPC_URL=$1
     # Change to test contracts directory to avoid OpenZeppelin dependency issues
     cd $CONTRACTS_DIR

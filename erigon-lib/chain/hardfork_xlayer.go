@@ -27,7 +27,7 @@ type XLayerForkConfig struct {
 var ForkId13DencunConfig = XLayerForkConfig{
 	MainnetBlock: 1000000000000, // TODO, need to be updated
 	TestnetBlock: 1000000000000, // TODO, need to be updated
-	DevnetBlock:  20,
+	DevnetBlock:  30,
 }
 
 // Fork configurations registry
