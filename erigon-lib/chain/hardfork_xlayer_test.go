@@ -55,8 +55,8 @@ func TestForkId13DencunConfig(t *testing.T) {
 	if config.TestnetBlock != 1000000000000 {
 		t.Errorf("ForkId13DencunConfig.TestnetBlock = %d, want 1000000000000", config.TestnetBlock)
 	}
-	if config.DevnetBlock != 100 {
-		t.Errorf("ForkId13DencunConfig.DevnetBlock = %d, want 100", config.DevnetBlock)
+	if config.DevnetBlock != 10 {
+		t.Errorf("ForkId13DencunConfig.DevnetBlock = %d, want 10", config.DevnetBlock)
 	}
 }
 
@@ -75,8 +75,8 @@ func TestForkConfigsRegistry(t *testing.T) {
 	if config.TestnetBlock != 1000000000000 {
 		t.Errorf("forkConfigs[ForkId13Dencun].TestnetBlock = %d, want 1000000000000", config.TestnetBlock)
 	}
-	if config.DevnetBlock != 100 {
-		t.Errorf("forkConfigs[ForkId13Dencun].DevnetBlock = %d, want 100", config.DevnetBlock)
+	if config.DevnetBlock != 10 {
+		t.Errorf("forkConfigs[ForkId13Dencun].DevnetBlock = %d, want 10", config.DevnetBlock)
 	}
 }
 
@@ -153,7 +153,7 @@ func TestGetForkBlock(t *testing.T) {
 	}{
 		{"Mainnet ForkId13Dencun", MainnetNetwork, ForkId13Dencun, 1000000000000},
 		{"Testnet ForkId13Dencun", TestnetNetwork, ForkId13Dencun, 1000000000000},
-		{"Local ForkId13Dencun", LocalNetwork, ForkId13Dencun, 100},
+		{"Local ForkId13Dencun", LocalNetwork, ForkId13Dencun, 10},
 		{"Unknown Network ForkId13Dencun", UnknownNetwork, ForkId13Dencun, 0},
 	}
 
@@ -282,7 +282,7 @@ func TestGetForkBlockAllNetworks(t *testing.T) {
 			case TestnetNetwork:
 				expectedBlock = 1000000000000
 			case LocalNetwork:
-				expectedBlock = 100
+				expectedBlock = 10
 			default:
 				expectedBlock = 0
 			}

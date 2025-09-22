@@ -83,15 +83,18 @@ CONTRACT_RELATIVE="contracts/selfdestruct.sol:SelfDestruct"
 
 if (( ${#CONSTRUCTOR_ARGS[@]} > 0 )); then
   JSON_OUT=$(forge create "$CONTRACT_RELATIVE" "\${CONSTRUCTOR_ARGS[@]}" \
-    --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --legacy --json --evm-version "cancun")
+    --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --legacy --json --evm-version "cancun" --broadcast)
 else
   JSON_OUT=$(forge create "$CONTRACT_RELATIVE" \
-    --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --legacy --json --evm-version "cancun")
+    --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --legacy --json --evm-version "cancun" --broadcast)
 fi
 
-TX_HASH=$(echo "$JSON_OUT" | jq -r '.txHash // .transactionHash')
+TX_HASH=$(echo "$JSON_OUT" | jq -r '.transactionHash')
 if [[ -z "$TX_HASH" || "$TX_HASH" == "null" ]]; then
-  echo "Failed to get txHash from forge output" >&2; exit 1
+  echo "Failed to get transactionHash from forge output" >&2
+  echo "Debug: forge output was:" >&2
+  echo "$JSON_OUT" >&2
+  exit 1
 fi
 
 echo "Deploy tx: $TX_HASH"

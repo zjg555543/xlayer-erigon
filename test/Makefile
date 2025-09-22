@@ -250,11 +250,14 @@ test-e2e-prune: stop all ## Runs group xlayer feature e2e tests checking race co
 	echo "E2E tests passed"
 
 .PHONY: test-dencun-e2e
-test-dencun-e2e: #stop all
+test-dencun-e2e: stop all
 	sleep 3
+	cd ../ && ./zk/tests/dencun/dencun.sh --expect-no-hardfork && cd -
+	sleep 30
 	docker ps -a
-	# trap '$(STOP)' EXIT; MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 600s ../ci/e2e-1/...
-	# echo "E2E tests passed"
+	cd ../ && ./zk/tests/dencun/dencun.sh && cd -
+	trap '$(STOP)' EXIT; MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 600s ../ci/e2e-1/...
+	echo "E2E tests passed"
 
 .PHONY: test-realtime-e2e
 test-realtime-e2e: stop realtime-run

@@ -1,23 +1,67 @@
 #!/bin/bash
 
-# Usage: ./dencun.sh [RPC_URL] [PRIVATE_KEY]
+# Usage: ./dencun.sh [RPC_URL] [PRIVATE_KEY] [--expect-no-hardfork]
 # 
 # Default values:
 #   RPC_URL: http://127.0.0.1:8124
 #   PRIVATE_KEY: 0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2
+#   EXPECT_HARDFORK: true (expect hardfork to be active by default)
 #
 # Examples:
-#   ./dencun.sh                                    # Use default values
+#   ./dencun.sh                                    # Use default values, expect hardfork active
 #   ./dencun.sh http://localhost:8545              # Override RPC URL only
 #   ./dencun.sh http://localhost:8545 0x1234...    # Override both parameters
+#   ./dencun.sh --expect-no-hardfork               # Expect tests to fail (before hardfork)
+#   ./dencun.sh http://localhost:8545 0x1234... --expect-no-hardfork  # All parameters
 
 # Default values for local development
 DEFAULT_RPC_URL="http://127.0.0.1:8124"
 DEFAULT_PRIVATE_KEY="0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2"
 
-# Use provided parameters or defaults
-RPC_URL=${1:-$DEFAULT_RPC_URL}
-PRIVATE_KEY="${2:-$DEFAULT_PRIVATE_KEY}"
+# Parse arguments
+RPC_URL=""
+PRIVATE_KEY=""
+EXPECT_HARDFORK=true
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --expect-no-hardfork)
+      EXPECT_HARDFORK=false
+      shift
+      ;;
+    --help|-h)
+      echo "Usage: $0 [RPC_URL] [PRIVATE_KEY] [--expect-no-hardfork]"
+      echo ""
+      echo "Default values:"
+      echo "  RPC_URL: http://127.0.0.1:8124"
+      echo "  PRIVATE_KEY: 0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2"
+      echo "  EXPECT_HARDFORK: true (expect hardfork to be active by default)"
+      echo ""
+      echo "Examples:"
+      echo "  $0                                    # Use default values, expect hardfork active"
+      echo "  $0 http://localhost:8545              # Override RPC URL only"
+      echo "  $0 http://localhost:8545 0x1234...    # Override both parameters"
+      echo "  $0 --expect-no-hardfork               # Expect tests to fail (before hardfork)"
+      echo "  $0 http://localhost:8545 0x1234... --expect-no-hardfork  # All parameters"
+      exit 0
+      ;;
+    *)
+      if [[ -z "$RPC_URL" ]]; then
+        RPC_URL="$1"
+      elif [[ -z "$PRIVATE_KEY" ]]; then
+        PRIVATE_KEY="$1"
+      else
+        echo "Unknown option: $1" >&2
+        exit 1
+      fi
+      shift
+      ;;
+  esac
+done
+
+# Use defaults if not provided
+RPC_URL=${RPC_URL:-$DEFAULT_RPC_URL}
+PRIVATE_KEY=${PRIVATE_KEY:-$DEFAULT_PRIVATE_KEY}
 
 RUNDIR=$(cd "$(dirname "$0")" && pwd)
 CONTRACTS_DIR="$RUNDIR/../../debug_tools/test-contracts"
@@ -25,6 +69,7 @@ CONTRACTS_DIR="$RUNDIR/../../debug_tools/test-contracts"
 echo "Using parameters:"
 echo "  RPC URL: $RPC_URL"
 echo "  Private Key: ${PRIVATE_KEY:0:10}..."
+echo "  Expect Hardfork: $EXPECT_HARDFORK"
 echo ""
 
 . "$RUNDIR/../utils.sh"
@@ -52,8 +97,25 @@ testPointEvalPrecompileEIP4844() {
     $RUNDIR/test_precompile_prague_pointeval.sh --rpc-url $RPC_URL
 
     if [ $? -ne 0 ]; then
-        echo "Point eval precompile test failed."
-        return 1
+        if [ "$EXPECT_HARDFORK" = "true" ]; then
+            echo "Point eval precompile test failed."
+            echo "ERROR: Expected test to pass after hardfork, but it failed!"
+            return 1
+        else
+            echo "Point eval precompile test failed."
+            echo "EXPECTED: Test should fail before hardfork - this is correct behavior"
+            return 0
+        fi
+    else
+        if [ "$EXPECT_HARDFORK" = "true" ]; then
+            echo "Point eval precompile test successful"
+            echo "SUCCESS: Test passed after hardfork as expected"
+            return 0
+        else
+            echo "Point eval precompile test successful"
+            echo "WARNING: Test passed before hardfork - this might indicate hardfork is already active"
+            return 0
+        fi
     fi
 }
 
@@ -64,7 +126,7 @@ testMCopyEIP5656() {
     local RPC_URL=$1
     # Change to test contracts directory to avoid OpenZeppelin dependency issues
     cd $CONTRACTS_DIR
-    CONTRACT=$(forge create contracts/MCopy.sol:MinimalMCopy --rpc-url $RPC_URL --private-key $PRIVATE_KEY --legacy --json --evm-version "cancun" | jq -r '.deployedTo')
+    CONTRACT=$(forge create contracts/MCopy.sol:MinimalMCopy --rpc-url $RPC_URL --private-key $PRIVATE_KEY --legacy --json --evm-version "cancun" --broadcast | jq -r '.deployedTo')
     if [ -z "$CONTRACT" ]; then
         echo "Failed to deploy MCopy contract."
         return 1
@@ -78,11 +140,26 @@ testMCopyEIP5656() {
     echo "MCOPY data returned: $DATA"
 
     if [ "$DATA" != $EXPECTED_DATA ]; then
-        echo "MCOPY data verification failed: expected $EXPECTED_DATA, got $DATA"
-        return 1
+        if [ "$EXPECT_HARDFORK" = "true" ]; then
+            echo "MCOPY data verification failed: expected $EXPECTED_DATA, got $DATA"
+            echo "ERROR: Expected test to pass after hardfork, but it failed!"
+            return 1
+        else
+            echo "MCOPY data verification failed: expected $EXPECTED_DATA, got $DATA"
+            echo "EXPECTED: Test should fail before hardfork - this is correct behavior"
+            return 0
+        fi
+    else
+        if [ "$EXPECT_HARDFORK" = "true" ]; then
+            echo "MCOPY data verification successful"
+            echo "SUCCESS: Test passed after hardfork as expected"
+            return 0
+        else
+            echo "MCOPY data verification successful"
+            echo "WARNING: Test passed before hardfork - this might indicate hardfork is already active"
+            return 0
+        fi
     fi
-
-    echo "MCOPY data verification successful"
 }
 
 # ------------------------------------
@@ -92,7 +169,7 @@ testTransientStorageEIP1153() {
     local RPC_URL=$1
     # Change to test contracts directory to avoid OpenZeppelin dependency issues
     cd $CONTRACTS_DIR
-    CONTRACT=$(forge create contracts/TransientStorage.sol:TransientStorage --rpc-url $RPC_URL --private-key $PRIVATE_KEY --legacy --json --evm-version "cancun" | jq -r '.deployedTo')
+    CONTRACT=$(forge create contracts/TransientStorage.sol:TransientStorage --rpc-url $RPC_URL --private-key $PRIVATE_KEY --legacy --json --evm-version "cancun" --broadcast | jq -r '.deployedTo')
     if [ -z "$CONTRACT" ]; then
         echo "Failed to deploy transient storage contract."
         return 1
@@ -107,16 +184,31 @@ testTransientStorageEIP1153() {
     echo "Transient storage data returned: $DATA"
 
     if [ "$DATA" != $INPUT_WORD ]; then
-        echo "Transient storage data verification failed: expected $INPUT_WORD, got $DATA"
-        return 1
+        if [ "$EXPECT_HARDFORK" = "true" ]; then
+            echo "Transient storage data verification failed: expected $INPUT_WORD, got $DATA"
+            echo "ERROR: Expected test to pass after hardfork, but it failed!"
+            return 1
+        else
+            echo "Transient storage data verification failed: expected $INPUT_WORD, got $DATA"
+            echo "EXPECTED: Test should fail before hardfork - this is correct behavior"
+            return 0
+        fi
+    else
+        if [ "$EXPECT_HARDFORK" = "true" ]; then
+            echo "Transient storage data verification successful"
+            echo "SUCCESS: Test passed after hardfork as expected"
+            return 0
+        else
+            echo "Transient storage data verification successful"
+            echo "WARNING: Test passed before hardfork - this might indicate hardfork is already active"
+            return 0
+        fi
     fi
-
-    echo "Transient storage data verification successful"
 }
 
 echo "=============== Running Dencun tests ==============="
 
-run testSendAllEIP4758EIP6780 "$RPC_URL"
+run testSendAllEIP4758EIP6780 "$RPC_URL"  # Disabled for now
 # run testPointEvalPrecompileEIP4844 "$RPC_URL" # Disabled due to L2 not supporting blobs
 run testMCopyEIP5656 "$RPC_URL"
 run testTransientStorageEIP1153 "$RPC_URL"
