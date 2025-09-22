@@ -133,3 +133,7 @@ kurtosis-cli.tar.gz
 zk/debug_tools/rpc-cache/cache.db
 zk/debug_tools/rpc-cache/rpc-cache
 zk/debug_tools/test-contracts/out
+cmd/prune-mdbx-data/compact-db-tool
+cmd/prune-mdbx-data/prune-chaindata-tool
+cmd/prune-mdbx-data/list-tables-tool
+cmd/prune-mdbx-data/prune-tool
