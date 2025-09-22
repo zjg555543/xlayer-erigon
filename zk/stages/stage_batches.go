@@ -844,13 +844,12 @@ func findCommonAncestorByReverse(
 		}
 	}
 
-	if lastTestedBlock > 1 {
-		log.Info("No matches in exponential search, trying remaining range", "range", fmt.Sprintf("[1, %d]", lastTestedBlock-1))
-		return binarySearchInRange(cfg, db, hermezDb, blockReaderRpc, 1, lastTestedBlock-1)
+	if lastTestedBlock > 0 {
+		lastTestedBlock = latestBlockNum + 1
 	}
 
-	log.Info("No common ancestor found", "latestBlockNum", latestBlockNum)
-	return 0, emptyHash, ErrFailedToFindCommonAncestor
+	log.Info("No matches in exponential search, trying remaining range", "range", fmt.Sprintf("[1, %d]", lastTestedBlock-1))
+	return binarySearchInRange(cfg, db, hermezDb, blockReaderRpc, 1, lastTestedBlock-1)
 }
 
 // binarySearchInRange performs binary search within a given range to find the latest matching block
