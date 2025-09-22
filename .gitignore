@@ -132,3 +132,7 @@ bridge-config-artifact
 kurtosis-cli.tar.gz
 zk/debug_tools/rpc-cache/cache.db
 zk/debug_tools/rpc-cache/rpc-cache
+cmd/prune-mdbx-data/compact-db-tool
+cmd/prune-mdbx-data/prune-chaindata-tool
+cmd/prune-mdbx-data/list-tables-tool
+cmd/prune-mdbx-data/prune-tool
