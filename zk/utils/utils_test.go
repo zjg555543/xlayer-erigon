@@ -80,6 +80,7 @@ func TestUpdateZkEVMBlockCfg(t *testing.T) {
 				constants.ForkID6IncaBerry:   900,
 				constants.ForkID5Dragonfruit: 900,
 				constants.ForkID4:            900,
+				constants.ForkId13Dencun:     30,
 			},
 		},
 		{
@@ -93,6 +94,7 @@ func TestUpdateZkEVMBlockCfg(t *testing.T) {
 				constants.ForkID6IncaBerry:   600,
 				constants.ForkID5Dragonfruit: 600,
 				constants.ForkID4:            600,
+				constants.ForkId13Dencun:     30,
 			},
 		},
 		{
@@ -105,10 +107,11 @@ func TestUpdateZkEVMBlockCfg(t *testing.T) {
 				constants.ForkID6IncaBerry:   600,
 				constants.ForkID5Dragonfruit: 600,
 				constants.ForkID4:            100,
+				constants.ForkId13Dencun:     30,
 			},
 		},
 	}
-
+	constants.InitializeNetworkByZkevmAddress("0xE45CCD0757670580a4a3600DE5cef1e45F0Ec2bd")
 	for _, scenario := range scenarios {
 		// t.Run(scenario.name, func(t *testing.T) {
 		fmt.Printf("Running scenario: %s\n", scenario.name)

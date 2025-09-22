@@ -1,0 +1,14 @@
+[profile.default]
+src = "contracts"
+out = "out"
+libs = ["lib"]
+solc_version = "0.8.24"
+evm_version = "cancun"
+
+# Remappings for OpenZeppelin (if needed in the future)
+remappings = [
+    "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/"
+]
+
+# Only compile contracts in this directory
+include_paths = ["contracts"]

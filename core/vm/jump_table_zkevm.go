@@ -4,6 +4,8 @@ var (
 	forkID4InstructionSet            = newForkID4InstructionSet()
 	forkID5DragonfruitInstructionSet = newForkID5DragonfruitInstructionSet()
 	forkID8ElderberryInstructionSet  = newForkID8InstructionSet()
+
+	ForkId13DencunInstructionSet = newForkID13DencunInstructionSet()
 )
 
 // newForkID4InstructionSet returns the instruction set for the forkID4
@@ -76,6 +78,17 @@ func newForkID8InstructionSet() JumpTable {
 	instructionSet[LOG2].execute = makeLog_zkevm_regularLogIndexes(2)
 	instructionSet[LOG3].execute = makeLog_zkevm_regularLogIndexes(3)
 	instructionSet[LOG4].execute = makeLog_zkevm_regularLogIndexes(4)
+
+	validateAndFillMaxStack(&instructionSet)
+	return instructionSet
+}
+
+func newForkID13DencunInstructionSet() JumpTable {
+	instructionSet := newForkID8InstructionSet()
+	// X Layer add the new instructions for the forkID13Dencun
+	enable1153(&instructionSet) // Transient storage opcodes
+	enable5656(&instructionSet) // MCOPY opcode
+	enable6780(&instructionSet) // SELFDESTRUCT only in same transaction
 
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet

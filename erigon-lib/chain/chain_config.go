@@ -29,6 +29,7 @@ import (
 // this needs to always be in descending order
 // add new forkIds at the beginning of the array
 var ForkIdsOrdered = []ForkId{
+	ForkId13Dencun,
 	ForkId13Durian,
 	ForkID12Banana,
 	ForkID11,
@@ -117,6 +118,7 @@ type Config struct {
 	ForkID11                *big.Int `json:"forkID11,omitempty"`
 	ForkID12BananaBlock     *big.Int `json:"forkID12BananaBlock,omitempty"`
 	ForkId13Durian          *big.Int `json:"forkID13Durian,omitempty"`
+	ForkId13Dencun          *big.Int `json:"ForkId13Dencun,omitempty"`
 	NormalcyBlock           *big.Int `json:"normalcyBlock,omitempty"`
 
 	AllowFreeTransactions bool   `json:"allowFreeTransactions,omitempty"`
@@ -183,6 +185,8 @@ func (c *Config) SetForkIdBlock(forkIdNumber ForkId, blockNum uint64) error {
 		c.ForkID12BananaBlock = new(big.Int).SetUint64(blockNum)
 	case ForkId13Durian:
 		c.ForkId13Durian = new(big.Int).SetUint64(blockNum)
+	case ForkId13Dencun:
+		c.ForkId13Dencun = new(big.Int).SetUint64(blockNum)
 	default:
 		return fmt.Errorf("unknown fork id number %d", forkIdNumber)
 	}
@@ -385,6 +389,10 @@ func (c *Config) IsForkID12Banana(num uint64) bool {
 
 func (c *Config) IsForkID13Durian(num uint64) bool {
 	return isForked(c.ForkId13Durian, num)
+}
+
+func (c *Config) IsForkID13Dencun(num uint64) bool {
+	return isForked(c.ForkId13Dencun, num)
 }
 
 // CheckCompatible checks whether scheduled fork transitions have been imported
@@ -633,6 +641,7 @@ type Rules struct {
 	IsAura                                                                                                                                               bool
 	IsNormalcy                                                                                                                                           bool
 	IsForkID4, IsForkID5Dragonfruit, IsForkID6IncaBerry, IsForkID7Etrog, IsForkID8Elderberry, IsForkId10, IsForkId11, IsForkID12Banana, IsForkID13Durian bool
+	IsForkID13Dencun                                                                                                                                     bool
 }
 
 // Rules ensures c's ChainID is not nil and returns a new Rules instance
@@ -669,6 +678,7 @@ func (c *Config) Rules(num uint64, time uint64) *Rules {
 		IsForkId11:           c.IsForkID11(num),
 		IsForkID12Banana:     c.IsForkID12Banana(num),
 		IsForkID13Durian:     c.IsForkID13Durian(num),
+		IsForkID13Dencun:     c.IsForkID13Dencun(num),
 	}
 }
 
