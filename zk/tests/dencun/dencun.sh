@@ -1,9 +1,31 @@
 #!/bin/bash
 
-RPC_URL=$1
-PRIVATE_KEY="$2"
+# Usage: ./dencun.sh [RPC_URL] [PRIVATE_KEY]
+# 
+# Default values:
+#   RPC_URL: http://127.0.0.1:8124
+#   PRIVATE_KEY: 0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2
+#
+# Examples:
+#   ./dencun.sh                                    # Use default values
+#   ./dencun.sh http://localhost:8545              # Override RPC URL only
+#   ./dencun.sh http://localhost:8545 0x1234...    # Override both parameters
+
+# Default values for local development
+DEFAULT_RPC_URL="http://127.0.0.1:8124"
+DEFAULT_PRIVATE_KEY="0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2"
+
+# Use provided parameters or defaults
+RPC_URL=${1:-$DEFAULT_RPC_URL}
+PRIVATE_KEY="${2:-$DEFAULT_PRIVATE_KEY}"
+
 RUNDIR=$(cd "$(dirname "$0")" && pwd)
 CONTRACTS_DIR="$RUNDIR/../../debug_tools/test-contracts"
+
+echo "Using parameters:"
+echo "  RPC URL: $RPC_URL"
+echo "  Private Key: ${PRIVATE_KEY:0:10}..."
+echo ""
 
 . "$RUNDIR/../utils.sh"
 
