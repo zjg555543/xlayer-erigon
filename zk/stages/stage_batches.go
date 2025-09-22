@@ -834,7 +834,7 @@ func findCommonAncestorByReverse(
 		testBlock := latestBlockNum - step
 		lastTestedBlock = testBlock
 
-		matches, err := isBlockMatching(cfg, db, hermezDb, blockReaderRpc, testBlock)
+		matches, _, err := isBlockMatching(cfg, db, hermezDb, blockReaderRpc, testBlock)
 		if err != nil {
 			return 0, emptyHash, fmt.Errorf("isBlockMatching failed for block %d: %w", testBlock, err)
 		}
@@ -862,17 +862,12 @@ func binarySearchInRange(cfg BatchesCfg, db erigon_db.ReadOnlyErigonDb, hermezDb
 
 	for left <= right {
 		mid := (left + right) / 2
-		matches, err := isBlockMatching(cfg, db, hermezDb, blockReaderRpc, mid)
+		matches, dbHash, err := isBlockMatching(cfg, db, hermezDb, blockReaderRpc, mid)
 		if err != nil {
 			return 0, emptyHash, fmt.Errorf("isBlockMatching failed for block %d: %w", mid, err)
 		}
 		if matches {
 			latestMatch = &mid
-			dbHash, err := db.ReadCanonicalHash(mid)
-			if err != nil {
-				left = mid + 1
-				continue
-			}
 			latestHash = dbHash
 			left = mid + 1
 		} else {
@@ -889,31 +884,32 @@ func binarySearchInRange(cfg BatchesCfg, db erigon_db.ReadOnlyErigonDb, hermezDb
 }
 
 // isBlockMatching checks if a block matches between datastream and local database
+// Returns: (matches, dbHash, error)
 func isBlockMatching(cfg BatchesCfg, db erigon_db.ReadOnlyErigonDb, hermezDb state.ReadOnlyHermezDb,
-	blockReaderRpc L2BlockReaderRpc, blockNum uint64) (bool, error) {
+	blockReaderRpc L2BlockReaderRpc, blockNum uint64) (bool, common.Hash, error) {
 
 	headerHash, err := blockReaderRpc.GetZKBlockByNumberHash(cfg.zkCfg.L2RpcUrl, blockNum)
 	if err != nil {
-		return false, nil
+		return false, common.Hash{}, nil
 	}
 
 	blockBatch, err := blockReaderRpc.GetBatchNumberByBlockNumber(cfg.zkCfg.L2RpcUrl, blockNum)
 	if err != nil {
-		return false, nil
+		return false, common.Hash{}, nil
 	}
 
 	dbHash, err := db.ReadCanonicalHash(blockNum)
 	if err != nil {
-		return false, err
+		return false, common.Hash{}, err
 	}
 
 	dbBatch, err := hermezDb.GetBatchNoByL2Block(blockNum)
 	if err != nil {
-		return false, err
+		return false, common.Hash{}, err
 	}
 
 	matches := headerHash != (common.Hash{}) && headerHash == dbHash && blockBatch == dbBatch
-	return matches, nil
+	return matches, dbHash, nil
 }
 
 // getUnwindPoint resolves the unwind block as the latest block in the previous batch, relative to the provided block.
