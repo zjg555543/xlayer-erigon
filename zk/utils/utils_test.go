@@ -80,6 +80,7 @@ func TestUpdateZkEVMBlockCfg(t *testing.T) {
 				constants.ForkID6IncaBerry:   900,
 				constants.ForkID5Dragonfruit: 900,
 				constants.ForkID4:            900,
+				constants.ForkId13Dencun:     0,
 			},
 		},
 		{
@@ -93,6 +94,7 @@ func TestUpdateZkEVMBlockCfg(t *testing.T) {
 				constants.ForkID6IncaBerry:   600,
 				constants.ForkID5Dragonfruit: 600,
 				constants.ForkID4:            600,
+				constants.ForkId13Dencun:     0,
 			},
 		},
 		{
@@ -105,6 +107,7 @@ func TestUpdateZkEVMBlockCfg(t *testing.T) {
 				constants.ForkID6IncaBerry:   600,
 				constants.ForkID5Dragonfruit: 600,
 				constants.ForkID4:            100,
+				constants.ForkId13Dencun:     0,
 			},
 		},
 	}
