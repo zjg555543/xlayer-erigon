@@ -247,7 +247,7 @@ func SpawnStageBatches(
 		return rollback(ctx, cfg, logPrefix, eriDb, hermezDb, unwindBlock, uint16(latestForkId), tx, u)
 	}
 	if highestDSL2Block < stageProgressBlockNo {
-		log.Info(fmt.Sprintf("[%s] Datastream behind, unwinding", logPrefix))
+		log.Info(fmt.Sprintf("[%s] Datastream behind, unwinding, highestDSL2Block", logPrefix), "highestDSL2Block", highestDSL2Block)
 		if _, err := unwindFn(highestDSL2Block); err != nil {
 			return err
 		}
@@ -707,11 +707,18 @@ func rollback(
 			log.Error(fmt.Sprintf("[%s] Failed to stop datastream client whilst rolling back", logPrefix), "error", err)
 		}
 	}()
+	log.Info(fmt.Sprintf("[%s] Searching for common ancestor using reverse algorithm", logPrefix),
+		"latestDSBlock", latestDSBlockNum)
+
 	ancestorBlockNum, ancestorBlockHash, err := findCommonAncestorByReverse(cfg, eriDb, hermezDb, l2BlockReaderRpc{}, latestDSBlockNum)
 	if err != nil {
-		return 0, fmt.Errorf("findCommonAncestor: %w", err)
+		log.Error(fmt.Sprintf("[%s] Failed to find common ancestor with reverse search", logPrefix),
+			"latestDSBlock", latestDSBlockNum,
+			"error", err.Error(),
+			"possibleCause", "RPC blocks may be completely pruned or DB corruption")
+		return 0, fmt.Errorf("findCommonAncestorByReverse: %w", err)
 	}
-	log.Debug(fmt.Sprintf("[%s] The common ancestor for datastream and db is block %d (%s)", logPrefix, ancestorBlockNum, ancestorBlockHash))
+	log.Info(fmt.Sprintf("[%s] The common ancestor for datastream and db is block %d (%s)", logPrefix, ancestorBlockNum, ancestorBlockHash))
 
 	unwindBlockNum, unwindBlockHash, batchNum, err := getUnwindPoint(eriDb, hermezDb, ancestorBlockNum, ancestorBlockHash)
 	if err != nil {
@@ -807,14 +814,18 @@ func findCommonAncestorByReverse(
 	latestBlockNum uint64,
 ) (uint64, common.Hash, error) {
 	if latestBlockNum == 0 {
+		log.Warn("Cannot search common ancestor with latestBlockNum=0")
 		return 0, emptyHash, ErrFailedToFindCommonAncestor
 	}
+
+	log.Info("Starting exponential search for common ancestor", "latestBlockNum", latestBlockNum)
 	var lastTestedBlock uint64
 	maxStep := latestBlockNum
 
 	for step := uint64(1); step <= maxStep; step *= 2 {
 		if latestBlockNum <= step {
 			if lastTestedBlock > 1 {
+				log.Info("Searching remaining range", "range", fmt.Sprintf("[1, %d]", lastTestedBlock-1))
 				return binarySearchInRange(cfg, db, hermezDb, blockReaderRpc, 1, lastTestedBlock-1)
 			}
 			break
@@ -828,16 +839,17 @@ func findCommonAncestorByReverse(
 			return 0, emptyHash, fmt.Errorf("isBlockMatching failed for block %d: %w", testBlock, err)
 		}
 		if matches {
+			log.Info("Found matching block", "block", testBlock)
 			return binarySearchInRange(cfg, db, hermezDb, blockReaderRpc, testBlock, latestBlockNum)
 		}
 	}
 
-	if lastTestedBlock > 1 {
-		return binarySearchInRange(cfg, db, hermezDb, blockReaderRpc, 1, lastTestedBlock-1)
+	if lastTestedBlock > 0 {
+		lastTestedBlock = latestBlockNum + 1
 	}
 
-	log.Error("Exponential search failed to find any common ancestor", "latestBlockNum", latestBlockNum)
-	return 0, emptyHash, ErrFailedToFindCommonAncestor
+	log.Info("No matches in exponential search, trying remaining range", "range", fmt.Sprintf("[1, %d]", lastTestedBlock-1))
+	return binarySearchInRange(cfg, db, hermezDb, blockReaderRpc, 1, lastTestedBlock-1)
 }
 
 // binarySearchInRange performs binary search within a given range to find the latest matching block
@@ -870,8 +882,11 @@ func binarySearchInRange(cfg BatchesCfg, db erigon_db.ReadOnlyErigonDb, hermezDb
 		}
 	}
 	if latestMatch == nil {
+		log.Info("Binary search found no common ancestor", "range", fmt.Sprintf("[%d, %d]", startBlock, endBlock))
 		return 0, emptyHash, ErrFailedToFindCommonAncestor
 	}
+
+	log.Info("Binary search found common ancestor", "block", *latestMatch)
 	return *latestMatch, latestHash, nil
 }
 

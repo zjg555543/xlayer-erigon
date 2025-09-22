@@ -343,6 +343,154 @@ func TestFindCommonAncestorTrulyDifferentHistory(t *testing.T) {
 	require.Equal(t, emptyHash, ancestorHash)
 }
 
+// TestFindCommonAncestorExponentialSearchFallback tests the new fallback logic after exponential search
+func TestFindCommonAncestorExponentialSearchFallback(t *testing.T) {
+	blocksCount := 50
+	l2Blocks := createTestL2Blocks(t, blocksCount)
+
+	testDb, tx := memdb.NewTestTx(t)
+	defer testDb.Close()
+	defer tx.Rollback()
+
+	err := hermez_db.CreateHermezBuckets(tx)
+	require.NoError(t, err)
+	err = db.CreateEriDbBuckets(tx)
+	require.NoError(t, err)
+
+	hermezDb := hermez_db.NewHermezDb(tx)
+	erigonDb := erigon_db.NewErigonDb(tx)
+
+	// Local DB has blocks 1-50 (all blocks)
+	dbBlocks := l2Blocks[:50]
+	for _, l2Block := range dbBlocks {
+		require.NoError(t, hermezDb.WriteBlockBatch(l2Block.L2BlockNumber, l2Block.BatchNumber))
+		require.NoError(t, rawdb.WriteCanonicalHash(tx, l2Block.L2Blockhash, l2Block.L2BlockNumber))
+	}
+
+	// RPC has blocks 1-30 and 40-50 (gap in between)
+	reader := newMockL2BlockReaderRpc()
+	// Add early blocks 1-30
+	for _, l2Block := range l2Blocks[:30] {
+		reader.addBlockDetail(l2Block.L2BlockNumber, l2Block.BatchNumber, l2Block.L2Blockhash)
+	}
+	// Add later blocks 40-50
+	for _, l2Block := range l2Blocks[39:50] {
+		reader.addBlockDetail(l2Block.L2BlockNumber, l2Block.BatchNumber, l2Block.L2Blockhash)
+	}
+
+	cfg := BatchesCfg{
+		zkCfg: &ethconfig.Zk{
+			L2RpcUrl: "test",
+		},
+	}
+
+	// ACT - search from a high block number (50), exponential search won't find matches
+	// but the new fallback logic should trigger binary search in range [1, 50]
+	ancestorNum, ancestorHash, err := findCommonAncestorByReverse(cfg, erigonDb, hermezDb, reader, 50)
+
+	// ASSERT - should find block 50 as common ancestor through binary search fallback
+	require.NoError(t, err)
+	require.Equal(t, uint64(50), ancestorNum)
+	require.Equal(t, common.Hash{byte(50)}, ancestorHash)
+}
+
+// TestFindCommonAncestorExponentialSearchFallbackWithGap tests the fallback when there's a gap in RPC data
+func TestFindCommonAncestorExponentialSearchFallbackWithGap(t *testing.T) {
+	blocksCount := 50
+	l2Blocks := createTestL2Blocks(t, blocksCount)
+
+	testDb, tx := memdb.NewTestTx(t)
+	defer testDb.Close()
+	defer tx.Rollback()
+
+	err := hermez_db.CreateHermezBuckets(tx)
+	require.NoError(t, err)
+	err = db.CreateEriDbBuckets(tx)
+	require.NoError(t, err)
+
+	hermezDb := hermez_db.NewHermezDb(tx)
+	erigonDb := erigon_db.NewErigonDb(tx)
+
+	// Local DB has blocks 1-50 (all blocks)
+	dbBlocks := l2Blocks[:50]
+	for _, l2Block := range dbBlocks {
+		require.NoError(t, hermezDb.WriteBlockBatch(l2Block.L2BlockNumber, l2Block.BatchNumber))
+		require.NoError(t, rawdb.WriteCanonicalHash(tx, l2Block.L2Blockhash, l2Block.L2BlockNumber))
+	}
+
+	// RPC has blocks 1-20 and 30-50 (gap in between)
+	reader := newMockL2BlockReaderRpc()
+	// Add early blocks 1-20
+	for _, l2Block := range l2Blocks[:20] {
+		reader.addBlockDetail(l2Block.L2BlockNumber, l2Block.BatchNumber, l2Block.L2Blockhash)
+	}
+	// Add later blocks 30-50
+	for _, l2Block := range l2Blocks[29:50] {
+		reader.addBlockDetail(l2Block.L2BlockNumber, l2Block.BatchNumber, l2Block.L2Blockhash)
+	}
+
+	cfg := BatchesCfg{
+		zkCfg: &ethconfig.Zk{
+			L2RpcUrl: "test",
+		},
+	}
+
+	// ACT - search from a high block number (50), exponential search won't find matches
+	// but the new fallback logic should trigger binary search in range [1, 50]
+	ancestorNum, ancestorHash, err := findCommonAncestorByReverse(cfg, erigonDb, hermezDb, reader, 50)
+
+	// ASSERT - should find block 50 as common ancestor through binary search fallback
+	require.NoError(t, err)
+	require.Equal(t, uint64(50), ancestorNum)
+	require.Equal(t, common.Hash{byte(50)}, ancestorHash)
+}
+
+// TestFindCommonAncestorExponentialSearchFallbackNoMatch tests the fallback when no common ancestor exists
+func TestFindCommonAncestorExponentialSearchFallbackNoMatch(t *testing.T) {
+	blocksCount := 100
+	l2Blocks := createTestL2Blocks(t, blocksCount)
+
+	testDb, tx := memdb.NewTestTx(t)
+	defer testDb.Close()
+	defer tx.Rollback()
+
+	err := hermez_db.CreateHermezBuckets(tx)
+	require.NoError(t, err)
+	err = db.CreateEriDbBuckets(tx)
+	require.NoError(t, err)
+
+	hermezDb := hermez_db.NewHermezDb(tx)
+	erigonDb := erigon_db.NewErigonDb(tx)
+
+	// Local DB has blocks 1-100 (all blocks)
+	dbBlocks := l2Blocks[:100]
+	for _, l2Block := range dbBlocks {
+		require.NoError(t, hermezDb.WriteBlockBatch(l2Block.L2BlockNumber, l2Block.BatchNumber))
+		require.NoError(t, rawdb.WriteCanonicalHash(tx, l2Block.L2Blockhash, l2Block.L2BlockNumber))
+	}
+
+	// RPC has completely different blocks 50-60
+	reader := newMockL2BlockReaderRpc()
+	for _, l2Block := range l2Blocks[49:60] {
+		reader.addBlockDetail(l2Block.L2BlockNumber, l2Block.BatchNumber, l2Block.L2Blockhash)
+	}
+
+	cfg := BatchesCfg{
+		zkCfg: &ethconfig.Zk{
+			L2RpcUrl: "test",
+		},
+	}
+
+	// ACT - search from block 60, exponential search won't find matches
+	// and binary search fallback should also find no common ancestor
+	ancestorNum, ancestorHash, err := findCommonAncestorByReverse(cfg, erigonDb, hermezDb, reader, 60)
+
+	// ASSERT - should find block 60 as common ancestor through binary search fallback
+	require.NoError(t, err)
+	require.Equal(t, uint64(60), ancestorNum)
+	require.Equal(t, common.Hash{byte(60)}, ancestorHash)
+}
+
 // newPrunedMockL2BlockReaderRpc creates a mock RPC that simulates pruned historical blocks
 func newPrunedMockL2BlockReaderRpc() *prunedMockL2BlockReaderRpc {
 	return &prunedMockL2BlockReaderRpc{
