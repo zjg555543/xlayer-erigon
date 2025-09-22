@@ -93,37 +93,6 @@ testSendAllEIP4758EIP6780() {
 }
 
 # ------------------------------------
-# EIP 4844: https://eips.ethereum.org/EIPS/eip-4844 Point eval precompile only (L2 does not support blobs)
-# ------------------------------------
-testPointEvalPrecompileEIP4844() {
-    echo "Before testPointEvalPrecompileEIP4844, current block: $(cast block-number --rpc-url $RPC_URL)"
-    local RPC_URL=$1
-    $RUNDIR/test_precompile_prague_pointeval.sh --rpc-url $RPC_URL
-
-    if [ $? -ne 0 ]; then
-        if [ "$EXPECT_HARDFORK" = "true" ]; then
-            echo "Point eval precompile test failed."
-            echo "ERROR: Expected test to pass after hardfork, but it failed!"
-            return 1
-        else
-            echo "Point eval precompile test failed."
-            echo "EXPECTED: Test should fail before hardfork - this is correct behavior"
-            return 0
-        fi
-    else
-        if [ "$EXPECT_HARDFORK" = "true" ]; then
-            echo "Point eval precompile test successful"
-            echo "SUCCESS: Test passed after hardfork as expected"
-            return 0
-        else
-            echo "Point eval precompile test successful"
-            echo "WARNING: Test passed before hardfork - this might indicate hardfork is already active"
-            return 0
-        fi
-    fi
-}
-
-# ------------------------------------
 # EIP 5656: https://eips.ethereum.org/EIPS/eip-5656 MCOPY
 # ------------------------------------
 testMCopyEIP5656() {
@@ -215,7 +184,6 @@ testTransientStorageEIP1153() {
 echo "=============== Running Dencun tests ==============="
 
 run testSendAllEIP4758EIP6780 "$RPC_URL"
-# run testPointEvalPrecompileEIP4844 "$RPC_URL" # Disabled due to L2 not supporting blobs
 run testMCopyEIP5656 "$RPC_URL"
 run testTransientStorageEIP1153 "$RPC_URL"
 
