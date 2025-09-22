@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Usage: ./dencun.sh [RPC_URL] [PRIVATE_KEY] [--expect-no-hardfork]
+# ./zk/tests/dencun/dencun.sh http://localhost:8123 0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2
 # 
 # Default values:
 #   RPC_URL: http://127.0.0.1:8124
@@ -208,7 +209,7 @@ testTransientStorageEIP1153() {
 
 echo "=============== Running Dencun tests ==============="
 
-run testSendAllEIP4758EIP6780 "$RPC_URL"  # Disabled for now
+run testSendAllEIP4758EIP6780 "$RPC_URL"
 # run testPointEvalPrecompileEIP4844 "$RPC_URL" # Disabled due to L2 not supporting blobs
 run testMCopyEIP5656 "$RPC_URL"
 run testTransientStorageEIP1153 "$RPC_URL"
