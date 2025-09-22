@@ -72,6 +72,7 @@ echo "  RPC URL: $RPC_URL"
 echo "  Private Key: ${PRIVATE_KEY:0:10}..."
 echo "  Expect Hardfork: $EXPECT_HARDFORK"
 echo ""
+echo "Current block: $(cast block-number --rpc-url $RPC_URL)"
 
 . "$RUNDIR/../utils.sh"
 
@@ -157,8 +158,8 @@ testMCopyEIP5656() {
             return 0
         else
             echo "MCOPY data verification successful"
-            echo "WARNING: Test passed before hardfork - this might indicate hardfork is already active"
-            return 0
+            echo "ERROR: Expected test to fail before hardfork, but it passed! Hardfork might already be active."
+            return 1
         fi
     fi
 }
@@ -201,8 +202,8 @@ testTransientStorageEIP1153() {
             return 0
         else
             echo "Transient storage data verification successful"
-            echo "WARNING: Test passed before hardfork - this might indicate hardfork is already active"
-            return 0
+            echo "ERROR: Expected test to fail before hardfork, but it passed! Hardfork might already be active."
+            return 1
         fi
     fi
 }
