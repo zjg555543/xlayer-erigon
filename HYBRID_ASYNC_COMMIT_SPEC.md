@@ -82,22 +82,106 @@ type CacheChain struct {
 
 ## 🔄 执行流程
 
-### 1. 模式判断逻辑
+### 0. 模式切换原则（避免远程查询）
+
+**核心原则：基于本地状态判断，避免网络延迟**
+
+| 判断依据 | DirectDB模式 | CacheMode模式 | 原因 |
+|---------|-------------|---------------|------|
+| **历史提交时间** | >300ms | ≤300ms | 基于本地性能历史 |
+| **同步状态** | 初始同步 | 正常追块 | 避免远程查询目标高度 |
+| **本地队列** | >10个区块 | ≤10个区块 | 基于本地待处理数据 |
+| **区块高度** | <1000 | ≥1000 | 初始同步判断 |
+| **最后更新** | >1小时前 | 最近更新 | 节点活跃度判断 |
+
+**优势**：
+- ✅ **零网络延迟**：所有判断基于本地状态
+- ✅ **自适应**：根据历史性能自动调整
+- ✅ **简单可靠**：避免复杂的远程状态查询
+
+### 1. 模式判断逻辑（优化版）
 ```go
-func (mgr *HybridTxManager) DetermineMode(blockRange int) TxMode {
-    if blockRange > 10 {
-        mgr.logger.Info("Using DirectDB mode", "blockRange", blockRange)
-        return DirectDB  // 大批量处理，承受597ms延迟
-    }
-    mgr.logger.Info("Using CacheMode", "blockRange", blockRange) 
-    return CacheMode     // 单块追赶，使用异步缓存
+type ModeDecision struct {
+    mode        TxMode
+    reason      string
+    blockRange  int
+    lastCommit  time.Duration
 }
 
-func getCurrentBlockRange(db kv.RwDB) int {
-    // 实现逻辑：计算当前区块到目标区块的距离
-    currentBlock := getCurrentBlockHeight(db)
-    targetBlock := getTargetBlockHeight() // 从网络或其他源获取
-    return int(targetBlock - currentBlock)
+func (mgr *HybridTxManager) DetermineMode(ctx context.Context) ModeDecision {
+    // ====== 策略1: 基于历史提交时间 ======
+    lastCommitTime := mgr.getLastCommitTime()
+    if lastCommitTime > 300*time.Millisecond {
+        // 上次提交超过300ms，说明数据量大，继续用DirectDB
+        return ModeDecision{
+            mode:       DirectDB,
+            reason:     "last_commit_slow",
+            lastCommit: lastCommitTime,
+        }
+    }
+    
+    // ====== 策略2: 基于本地状态判断 ======
+    localInfo := mgr.getLocalBlockInfo()
+    
+    // 检查是否在初始同步阶段
+    if mgr.isInitialSync(localInfo) {
+        return ModeDecision{
+            mode:   DirectDB,
+            reason: "initial_sync",
+        }
+    }
+    
+    // 检查是否有大量待处理区块（基于本地队列）
+    pendingBlocks := mgr.getPendingBlocksCount()
+    if pendingBlocks > 10 {
+        return ModeDecision{
+            mode:       DirectDB,
+            reason:     "large_batch_local",
+            blockRange: pendingBlocks,
+        }
+    }
+    
+    // ====== 策略3: 默认使用CacheMode ======
+    // 正常追块情况，优先使用异步模式
+    return ModeDecision{
+        mode:   CacheMode,
+        reason: "normal_catchup",
+    }
+}
+
+// 本地状态检查，避免远程查询
+func (mgr *HybridTxManager) getLocalBlockInfo() LocalBlockInfo {
+    return LocalBlockInfo{
+        currentHeight:    mgr.getCurrentLocalHeight(),
+        lastUpdateTime:   mgr.getLastBlockTime(),
+        syncStatus:       mgr.getSyncStatus(),
+        pendingTxCount:   mgr.getPendingTxCount(),
+    }
+}
+
+func (mgr *HybridTxManager) isInitialSync(info LocalBlockInfo) bool {
+    // 判断是否在初始同步：
+    // 1. 当前高度很低（< 1000）
+    // 2. 最后更新时间很久（> 1小时前）
+    // 3. 同步状态为"syncing"
+    if info.currentHeight < 1000 {
+        return true
+    }
+    if time.Since(info.lastUpdateTime) > time.Hour {
+        return true
+    }
+    return info.syncStatus == "syncing"
+}
+
+func (mgr *HybridTxManager) getPendingBlocksCount() int {
+    // 基于本地队列或内存池判断待处理区块数
+    // 避免远程网络查询
+    return mgr.blockQueue.Size() + mgr.txPool.PendingCount()/1000
+}
+
+func (mgr *HybridTxManager) getLastCommitTime() time.Duration {
+    // 从历史记录中获取最近几次提交的平均时间
+    return mgr.commitHistory.GetAverageTime(5) // 最近5次平均
 }
 ```
 
@@ -115,12 +199,17 @@ func StageLoopIteration(ctx context.Context, db kv.RwDB, txc wrap.TxContainer,
             logger, blockReader, hook, forcePartialCommit)
     }
     
-    blockRange := getCurrentBlockRange(db)
     hybridMgr := GetOrCreateHybridTxManager(db, logger)
-    mode := hybridMgr.DetermineMode(blockRange)
+    decision := hybridMgr.DetermineMode(ctx)
+    
+    logger.Info("Mode decision made", 
+        "mode", decision.mode, 
+        "reason", decision.reason,
+        "lastCommit", decision.lastCommit,
+        "blockRange", decision.blockRange)
     
     // ====== 第二步：创建对应事务 ======
-    switch mode {
+    switch decision.mode {
     case DirectDB:
         // 大批量：使用原有的数据库事务
         txc.Tx, err = db.BeginRwNosync(ctx)
@@ -149,7 +238,7 @@ func StageLoopIteration(ctx context.Context, db kv.RwDB, txc wrap.TxContainer,
     // ====== 第四步：提交处理 ======
     commitStart := time.Now()
     
-    switch mode {
+    switch decision.mode {
     case DirectDB:
         // 直接提交，承受597ms延迟
         err = txc.Tx.Commit()
@@ -356,32 +445,75 @@ func (chain *CacheChain) AddCache(blockHeight uint64, cache *PendingCache) {
 - **缓存链过长**：超过20个区块告警
 - **落盘失败率**：超过1%告警
 
-## 📝 实施计划
+## ⚠️ 技术风险分析
 
-### 第一阶段：基础框架（1-2天）
-1. 实现`HybridTxManager`基础结构
-2. 实现模式判断逻辑
-3. 集成到`StageLoopIteration`
+### 🔴 高风险（可能导致数据丢失或系统崩溃）
 
-### 第二阶段：DirectDB模式（0.5天）
-1. 确保DirectDB模式与原有逻辑一致
-2. 添加性能监控
-3. 测试大批量同步场景
+#### 1. 异步落盘失败风险
+- **风险**：CacheMode下，异步落盘到数据库失败，数据永久丢失
+- **场景**：磁盘满、权限错误、MDBX损坏
+- **影响**：区块数据丢失，节点状态不一致
+- **缓解**：重试机制、监控告警、fallback到同步模式
 
-### 第三阶段：CacheMode模式（2-3天）
-1. 实现`HybridTx`和`PendingCache`
-2. 实现异步落盘机制
-3. 测试单块追赶场景
+#### 2. 缓存链数据不一致
+- **风险**：Stage读取到错误的历史数据，导致状态错误
+- **场景**：缓存链中某个区块的数据损坏或丢失
+- **影响**：后续区块处理错误，可能需要重新同步
+- **缓解**：数据校验、状态回滚机制
 
-### 第四阶段：缓存链和优化（1-2天）
-1. 实现`CacheChain`
-2. 添加监控和告警
-3. 性能测试和调优
+#### 3. 内存溢出风险
+- **风险**：大量未落盘缓存占用过多内存，导致OOM
+- **场景**：异步落盘速度跟不上Stage处理速度
+- **影响**：节点崩溃，需要重启
+- **缓解**：内存限制、强制同步fallback
 
-### 第五阶段：生产验证（1天）
-1. 灰度测试
-2. 性能对比
-3. 稳定性验证
+### 🟡 中风险（可能导致性能问题）
+
+#### 4. 缓存链查询性能
+- **风险**：缓存链过长时，查询性能下降
+- **场景**：大量未落盘区块，缓存链>20个区块
+- **影响**：Stage执行变慢，反而降低性能
+- **缓解**：限制缓存链长度、LRU淘汰
+
+#### 5. 锁竞争问题
+- **风险**：缓存链的读写锁竞争，影响并发性能
+- **场景**：高频的Stage执行和异步落盘操作
+- **影响**：系统吞吐量下降
+- **缓解**：细粒度锁、无锁数据结构
+
+#### 6. 模式判断延迟（已优化）
+- **风险**：~~频繁远程查询导致模式判断延迟~~（已解决）
+- **场景**：~~每次Stage执行都查询远程目标高度~~（已避免）
+- **影响**：~~增加Stage执行延迟，抵消异步收益~~（已消除）
+- **缓解**：✅ **基于本地状态判断，零网络延迟**
+
+### 🟢 低风险（可能导致功能异常）
+
+#### 7. 接口兼容性
+- **风险**：HybridTx未完全实现kv.RwTx接口
+- **场景**：Stage使用了未实现的接口方法
+- **影响**：运行时panic
+- **缓解**：完整接口实现、单元测试覆盖
+
+#### 8. 监控数据不准确
+- **风险**：性能指标统计错误，误导优化方向
+- **场景**：并发统计、时间计算错误
+- **影响**：错误的性能判断
+- **缓解**：指标验证、对比测试
+
+### 🔥 最大风险：数据丢失
+
+**最严重的风险是CacheMode下的数据丢失**：
+1. Stage认为提交成功（立即返回）
+2. 异步落盘失败（磁盘问题、崩溃等）
+3. 缓存数据丢失，但Stage已继续
+4. 导致区块链状态不一致
+
+**风险缓解策略**：
+- **重试机制**：异步落盘失败后自动重试
+- **持久化缓存**：将缓存写入临时文件
+- **健康检查**：定期检查落盘状态
+- **紧急fallback**：检测到风险时切换到同步模式
 
 ## 🚨 严格执行要求
 
