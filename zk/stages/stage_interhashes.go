@@ -2,6 +2,7 @@ package stages
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/length"
@@ -80,7 +81,7 @@ func StageZkInterHashesCfg(
 	}
 }
 
-func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, txsmt kv.RwTx, cfg ZkInterHashesCfg, ctx context.Context) (root common.Hash, err error) {
+func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, txsmt kv.RwTx, cfg ZkInterHashesCfg, ctx context.Context, firstCycle bool) (root common.Hash, err error) {
 	logPrefix := s.LogPrefix()
 
 	quit := ctx.Done()
@@ -142,26 +143,80 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	shouldIncrementBecauseOfExecutionConditions := s.BlockNumber > 0 && !shouldRegenerate
 	shouldIncrement := shouldIncrementBecauseOfAFlag || shouldIncrementBecauseOfExecutionConditions
 
+	if cfg.zk.XLayer.EnableAsyncCommit {
+		startWaitTime := time.Now()
+		s.FlushSmtCacheWait()
+		costTime := time.Since(startWaitTime)
+		log.Info(fmt.Sprintf("[%s] AC wait cost time: %s", logPrefix, costTime))
+	}
+
+	blockHeightDiff := to - s.BlockNumber
+	useAsyncMode := cfg.zk != nil && cfg.zk.XLayer.EnableAsyncCommit && blockHeightDiff <= 1000 && txsmt != nil && shouldIncrement
+
 	// For X Layer, split db and ac
-	eridb := db2.NewEriDb(txsmt, tx)
+	var eridb smt.DB
 	if txsmt == nil {
 		eridb = db2.NewEriDb(tx, tx)
+	} else {
+		eridb = db2.NewEriDb(txsmt, tx)
 	}
-	smt := smt.NewSMT(eridb, false)
+	smtInstance := smt.NewSMT(eridb, false)
+
+	// For X Layer RPC mode: SMT alignment check on first cycle
+	if firstCycle && useAsyncMode {
+		// Get actual SMT database height using eridb.GetLastHeight()
+		smtRealHeight, err := eridb.GetLastHeight()
+		if err != nil {
+			log.Warn(fmt.Sprintf("[%s] SMT alignment check: failed to get SMT real height", logPrefix), "error", err)
+			return trie.EmptyRoot, err
+		} else {
+			// Check if SMT stage progress is inconsistent with SMT database real height
+			if s.BlockNumber != smtRealHeight {
+				log.Warn(fmt.Sprintf("[%s] SMT alignment check: inconsistency detected, triggering unwind", logPrefix),
+					"smtStageHeight", s.BlockNumber,
+					"smtRealHeight", smtRealHeight,
+					"gap", int64(s.BlockNumber)-int64(smtRealHeight))
+
+				// Unwind to the consistent height (min of stage and real height)
+				unwindHeight := smtRealHeight
+				if s.BlockNumber < smtRealHeight {
+					unwindHeight = s.BlockNumber
+				}
+
+				u.UnwindTo(unwindHeight, stagedsync.BadBlock(common.Hash{},
+					fmt.Errorf("RPC SMT alignment: stage height %d inconsistent with SMT real height %d",
+						s.BlockNumber, smtRealHeight)))
+
+				return trie.EmptyRoot, fmt.Errorf("SMT alignment unwind triggered to height %d", unwindHeight)
+			} else {
+				log.Info(fmt.Sprintf("[%s] SMT alignment check passed", logPrefix),
+					"smtStageHeight", s.BlockNumber, "smtRealHeight", smtRealHeight)
+			}
+		}
+	}
 
 	if shouldIncrement {
 		if shouldIncrementBecauseOfAFlag {
 			log.Debug(fmt.Sprintf("[%s] IncrementTreeAlways true - incrementing tree", logPrefix), "previousRootHeight", s.BlockNumber, "calculatingRootHeight", to)
 		}
 
-		eridb.OpenBatch(quit)
+		if useAsyncMode {
+			eridb = db2.NewEriCacheDb(ctx, txsmt, tx)
+			if eriCacheDb, ok := eridb.(*db2.EriCacheDb); ok {
+				eriCacheDb.SetCache(s.GetSmtCache())
+			}
+			smtInstance = smt.NewSMT(eridb, false)
+		} else {
+			triggerSmtFlush(s, cfg.zk.XLayer.StandaloneSMTDatabase, to, "mode switch", true)
+		}
 
-		// For X Layer, split db and ac
-		if root, err = zkIncrementIntermediateHashes(ctx, logPrefix, s, tx, smt, s.BlockNumber, to); err != nil {
+		eridb.OpenBatch(quit)
+		if root, err = zkIncrementIntermediateHashes(ctx, logPrefix, s, tx, smtInstance, s.BlockNumber, to); err != nil {
 			return trie.EmptyRoot, err
 		}
 	} else {
-		if root, err = regenerateIntermediateHashes(ctx, logPrefix, tx, eridb, smt, to); err != nil {
+		triggerSmtFlush(s, cfg.zk.XLayer.StandaloneSMTDatabase, to, "regenerate mode", true)
+		if root, err = regenerateIntermediateHashes(ctx, logPrefix, tx, eridb.(*db2.EriDb), smtInstance, to); err != nil {
 			return trie.EmptyRoot, err
 		}
 	}
@@ -195,6 +250,15 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 		}
 	}
 
+	// Extract cache for async mode after successful execution
+	if useAsyncMode {
+		handleAsyncModeCache(s, eridb, to, blockHeightDiff)
+		// Start async flush after SMT execution is complete (same as sequencer)
+		if shouldTriggerSmtFlush(logPrefix, to) {
+			triggerSmtFlush(s, cfg.zk.XLayer.StandaloneSMTDatabase, to, "periodic flush", false)
+		}
+	}
+
 	if err = s.Update(tx, to); err != nil {
 		return trie.EmptyRoot, err
 	}
@@ -205,7 +269,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 		}
 	}
 	// For X Layer, split db and ac
-	if !useExternalSmtTx && txsmt != nil {
+	if !useExternalSmtTx && txsmt != nil && !useAsyncMode {
 		if err := txsmt.Commit(); err != nil {
 			return trie.EmptyRoot, err
 		}
@@ -639,4 +703,49 @@ func insertAccountStateToKV(db smt.DB, keys []utils.NodeKey, ethAddr string, bal
 		db.InsertKeySource(keyNonce, ks)
 	}
 	return keys, nil
+}
+
+func triggerSmtFlush(s *stagedsync.StageState, standaloneSMTDatabase bool, blockHeight uint64, reason string, grace bool) {
+	cache := s.GetSmtCache()
+	if len(cache) == 0 {
+		return
+	}
+
+	log.Info("Trigger flush SMT cache", "blockHeight", blockHeight, "reason", reason, "cacheBlocks", len(cache))
+	s.FlushSmtCacheSignalInc()
+	go func() {
+		defer s.FlushSmtCacheDone()
+		_ = s.FlushSmtCache(standaloneSMTDatabase, grace)
+	}()
+	if grace {
+		s.FlushSmtCacheWait()
+	}
+}
+
+func handleAsyncModeCache(s *stagedsync.StageState, eridb smt.DB, blockHeight uint64, blockHeightDiff uint64) {
+	if eriCacheDb, ok := eridb.(*db2.EriCacheDb); ok {
+		blockCache := eriCacheDb.RetriveAndCleanCache()
+		s.SetSmtCache(blockHeight, blockCache)
+	}
+}
+
+const flushInterval = 60 // seconds
+var lastFlushTime int64 = 0
+
+func shouldTriggerSmtFlush(logPrefix string, currentHeight uint64) bool {
+	now := time.Now().Unix()
+	last := atomic.LoadInt64(&lastFlushTime)
+
+	if last == 0 {
+		atomic.StoreInt64(&lastFlushTime, now)
+		return false
+	}
+
+	if now-last >= flushInterval {
+		if atomic.CompareAndSwapInt64(&lastFlushTime, last, now) {
+			log.Info(fmt.Sprintf("[%s] SMT flush triggered: 60s interval reached", logPrefix), "height", currentHeight)
+			return true
+		}
+	}
+	return false
 }

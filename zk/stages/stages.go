@@ -410,8 +410,8 @@ func DefaultZkStages(
 			Description: "Generate intermediate hashes and computing state root",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
-				// For X Layer, split db and ac
-				_, err := SpawnZkIntermediateHashesStage(s, u, txc.Tx, txc.TxSmt, zkInterHashesCfg, ctx)
+				// For X Layer, split db and ac - SMT alignment check on first cycle
+				_, err := SpawnZkIntermediateHashesStage(s, u, txc.Tx, txc.TxSmt, zkInterHashesCfg, ctx, firstCycle)
 				return err
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {

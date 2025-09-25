@@ -28,12 +28,19 @@ func AsyncFlushSmtData(ctx context.Context,
 	logger log.Logger,
 	smtFlushDoneCh chan struct{},
 ) {
-	if !sequencer.IsSequencer() || !config.EnableAsyncCommit {
-		logger.Info("AsyncFlushSmtData skipped",
+	// Support both sequencer and RPC modes when async commit is enabled
+	if !config.EnableAsyncCommit {
+		logger.Info("AsyncFlushSmtData skipped - async commit disabled",
 			"isSequencer", sequencer.IsSequencer(),
 			"enableAsyncCommit", config.EnableAsyncCommit)
 		return
 	}
+
+	mode := "RPC"
+	if sequencer.IsSequencer() {
+		mode = "Sequencer"
+	}
+	logger.Info("AsyncFlushSmtData started", "mode", mode, "enableAsyncCommit", config.EnableAsyncCommit)
 
 	db, ok := _db.(*mdbx.MdbxKV)
 	if !ok {
