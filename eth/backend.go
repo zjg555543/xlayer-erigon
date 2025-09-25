@@ -2211,9 +2211,13 @@ func (s *Ethereum) Stop() error {
 		}
 	}
 
-	// For X Layer, split db and ac
-	if sequencer.IsSequencer() && s.config.Zk.XLayer.EnableAsyncCommit {
-		s.logger.Info("Stopping SMT flush service...")
+	// For X Layer, split db and ac - Support both sequencer and RPC modes
+	if s.config.Zk.XLayer.EnableAsyncCommit {
+		mode := "RPC"
+		if sequencer.IsSequencer() {
+			mode = "Sequencer"
+		}
+		s.logger.Info("Stopping SMT flush service...", "mode", mode)
 		s.smtFlushCancel()
 		<-s.smtFlushDoneCh
 	}
