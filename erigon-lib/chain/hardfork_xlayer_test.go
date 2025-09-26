@@ -2,6 +2,8 @@ package chain
 
 import (
 	"testing"
+
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 )
 
 // Test NetworkType constants
@@ -52,8 +54,8 @@ func TestForkId13DencunConfig(t *testing.T) {
 	if config.MainnetBlock != 1000000000000 {
 		t.Errorf("ForkId13DencunConfig.MainnetBlock = %d, want 1000000000000", config.MainnetBlock)
 	}
-	if config.TestnetBlock != 1000000000000 {
-		t.Errorf("ForkId13DencunConfig.TestnetBlock = %d, want 1000000000000", config.TestnetBlock)
+	if config.TestnetBlock != 7953000 {
+		t.Errorf("ForkId13DencunConfig.TestnetBlock = %d, want 7953000", config.TestnetBlock)
 	}
 	if config.DevnetBlock != 30 {
 		t.Errorf("ForkId13DencunConfig.DevnetBlock = %d, want 30", config.DevnetBlock)
@@ -72,8 +74,8 @@ func TestForkConfigsRegistry(t *testing.T) {
 	if config.MainnetBlock != 1000000000000 {
 		t.Errorf("forkConfigs[ForkId13Dencun].MainnetBlock = %d, want 1000000000000", config.MainnetBlock)
 	}
-	if config.TestnetBlock != 1000000000000 {
-		t.Errorf("forkConfigs[ForkId13Dencun].TestnetBlock = %d, want 1000000000000", config.TestnetBlock)
+	if config.TestnetBlock != 7953000 {
+		t.Errorf("forkConfigs[ForkId13Dencun].TestnetBlock = %d, want 7953000", config.TestnetBlock)
 	}
 	if config.DevnetBlock != 30 {
 		t.Errorf("forkConfigs[ForkId13Dencun].DevnetBlock = %d, want 30", config.DevnetBlock)
@@ -87,19 +89,50 @@ func TestZkevmAddressNetworkMap(t *testing.T) {
 		address string
 		network NetworkType
 	}{
-		{"Mainnet", "0x2B0ee28D4D51bC9aDde5E58E295873F61F4a0507", MainnetNetwork},
+		{"Mainnet", "0x2b0ee28d4d51bc9adde5e58e295873f61f4a0507", MainnetNetwork},
 		{"Testnet", "0x7b1472be9a0115c3076b9f30e6bab91b13b3be6b", TestnetNetwork},
-		{"Local", "0xE45CCD0757670580a4a3600DE5cef1e45F0Ec2bd", LocalNetwork},
+		{"Local", "0xe45ccd0757670580a4a3600de5cef1e45f0ec2bd", LocalNetwork},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			network, exists := zkevmAddressNetworkMap[tt.address]
+			addr := libcommon.HexToAddress(tt.address)
+			network, exists := zkevmAddressNetworkMap[addr]
 			if !exists {
 				t.Errorf("Address %s should exist in zkevmAddressNetworkMap", tt.address)
 			}
 			if network != tt.network {
 				t.Errorf("zkevmAddressNetworkMap[%s] = %d, want %d", tt.address, network, tt.network)
+			}
+		})
+	}
+}
+
+// Test case-insensitive address comparison
+func TestInitializeNetworkByZkevmAddressCaseInsensitive(t *testing.T) {
+	tests := []struct {
+		name         string
+		inputAddress string
+		expected     NetworkType
+	}{
+		{"Mainnet - lowercase", "0x2b0ee28d4d51bc9adde5e58e295873f61f4a0507", MainnetNetwork},
+		{"Mainnet - uppercase", "0x2B0EE28D4D51BC9ADDE5E58E295873F61F4A0507", MainnetNetwork},
+		{"Mainnet - mixed case", "0x2B0ee28D4D51bC9aDde5E58E295873F61F4a0507", MainnetNetwork},
+		{"Testnet - lowercase", "0x7b1472be9a0115c3076b9f30e6bab91b13b3be6b", TestnetNetwork},
+		{"Testnet - uppercase", "0x7B1472BE9A0115C3076B9F30E6BAB91B13B3BE6B", TestnetNetwork},
+		{"Local - mixed case", "0xE45CCD0757670580a4a3600DE5cef1e45F0Ec2bd", LocalNetwork},
+		{"Unknown address", "0x1234567890123456789012345678901234567890", UnknownNetwork},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset currentNetwork before each test
+			currentNetwork = UnknownNetwork
+
+			InitializeNetworkByZkevmAddress(tt.inputAddress)
+
+			if currentNetwork != tt.expected {
+				t.Errorf("InitializeNetworkByZkevmAddress(%s) = %d, want %d", tt.inputAddress, currentNetwork, tt.expected)
 			}
 		})
 	}
@@ -118,9 +151,9 @@ func TestInitializeNetworkByZkevmAddress(t *testing.T) {
 		zkevmAddr       string
 		expectedNetwork NetworkType
 	}{
-		{"Mainnet Address", "0x2B0ee28D4D51bC9aDde5E58E295873F61F4a0507", MainnetNetwork},
+		{"Mainnet Address", "0x2b0ee28d4d51bc9adde5e58e295873f61f4a0507", MainnetNetwork},
 		{"Testnet Address", "0x7b1472be9a0115c3076b9f30e6bab91b13b3be6b", TestnetNetwork},
-		{"Local Address", "0xE45CCD0757670580a4a3600DE5cef1e45F0Ec2bd", LocalNetwork},
+		{"Local Address", "0xe45ccd0757670580a4a3600de5cef1e45f0ec2bd", LocalNetwork},
 		{"Unknown Address", "0x1234567890123456789012345678901234567890", UnknownNetwork},
 		{"Empty Address", "", UnknownNetwork},
 		{"Invalid Address", "invalid_address", UnknownNetwork},
@@ -152,7 +185,7 @@ func TestGetForkBlock(t *testing.T) {
 		expectedBlock uint64
 	}{
 		{"Mainnet ForkId13Dencun", MainnetNetwork, ForkId13Dencun, 1000000000000},
-		{"Testnet ForkId13Dencun", TestnetNetwork, ForkId13Dencun, 1000000000000},
+		{"Testnet ForkId13Dencun", TestnetNetwork, ForkId13Dencun, 7953000},
 		{"Local ForkId13Dencun", LocalNetwork, ForkId13Dencun, 30},
 		{"Unknown Network ForkId13Dencun", UnknownNetwork, ForkId13Dencun, 0},
 	}
@@ -241,9 +274,9 @@ func TestInitializeNetworkByZkevmAddressEdgeCases(t *testing.T) {
 		zkevmAddr       string
 		expectedNetwork NetworkType
 	}{
-		{"Lowercase mainnet", "0x2b0ee28d4d51bc9adde5e58e295873f61f4a0507", UnknownNetwork}, // Case sensitive
-		{"Uppercase mainnet", "0X2B0EE28D4D51BC9ADDE5E58E295873F61F4A0507", UnknownNetwork}, // Case sensitive
-		{"Without 0x prefix", "2B0ee28D4D51bC9aDde5E58E295873F61F4a0507", UnknownNetwork},
+		{"Lowercase mainnet", "0x2b0ee28d4d51bc9adde5e58e295873f61f4a0507", MainnetNetwork}, // Case insensitive now
+		{"Uppercase mainnet", "0X2B0EE28D4D51BC9ADDE5E58E295873F61F4A0507", MainnetNetwork}, // Case insensitive now
+		{"Without 0x prefix", "2B0ee28D4D51bC9aDde5E58E295873F61F4a0507", MainnetNetwork},   // HexToAddress handles this
 		{"With extra characters", "0x2B0ee28D4D51bC9aDde5E58E295873F61F4a0507x", UnknownNetwork},
 		{"Short address", "0x2B0ee28D4D51bC9aDde5E58E295873F61F4a050", UnknownNetwork},
 		{"Long address", "0x2B0ee28D4D51bC9aDde5E58E295873F61F4a05077", UnknownNetwork},
@@ -280,7 +313,7 @@ func TestGetForkBlockAllNetworks(t *testing.T) {
 			case MainnetNetwork:
 				expectedBlock = 1000000000000
 			case TestnetNetwork:
-				expectedBlock = 1000000000000
+				expectedBlock = 7953000
 			case LocalNetwork:
 				expectedBlock = 30
 			default:
@@ -412,16 +445,17 @@ func TestZkevmAddressNetworkMapImmutability(t *testing.T) {
 		t.Errorf("zkevmAddressNetworkMap size = %d, want %d", len(zkevmAddressNetworkMap), expectedSize)
 	}
 
-	// Check all expected addresses exist
+	// Check all expected addresses exist (all in lowercase)
 	expectedAddresses := []string{
-		"0x2B0ee28D4D51bC9aDde5E58E295873F61F4a0507",
+		"0x2b0ee28d4d51bc9adde5e58e295873f61f4a0507",
 		"0x7b1472be9a0115c3076b9f30e6bab91b13b3be6b",
-		"0xE45CCD0757670580a4a3600DE5cef1e45F0Ec2bd",
+		"0xe45ccd0757670580a4a3600de5cef1e45f0ec2bd",
 	}
 
-	for _, addr := range expectedAddresses {
+	for _, addrStr := range expectedAddresses {
+		addr := libcommon.HexToAddress(addrStr)
 		if _, exists := zkevmAddressNetworkMap[addr]; !exists {
-			t.Errorf("Expected address %s not found in zkevmAddressNetworkMap", addr)
+			t.Errorf("Expected address %s not found in zkevmAddressNetworkMap", addrStr)
 		}
 	}
 }
