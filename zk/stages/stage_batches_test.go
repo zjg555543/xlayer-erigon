@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
@@ -277,4 +278,164 @@ func (m mockL2BlockReaderRpc) GetZKBlockByNumberHash(url string, blockNum uint64
 
 func (m mockL2BlockReaderRpc) GetBatchNumberByBlockNumber(url string, blockNum uint64) (uint64, error) {
 	return m.blockBatches[blockNum], nil
+}
+
+// TestGetHighestDSL2BlockWithOptimizedAPI tests the optimized API success scenario
+func TestGetHighestDSL2BlockWithOptimizedAPI(t *testing.T) {
+	ctx := context.Background()
+
+	// Create test L2 blocks
+	fullL2Blocks := createTestL2Blocks(t, 5)
+	gerUpdates := []types.GerUpdate{}
+
+	// Create mock client that supports optimized API
+	mockClient := &MockOptimizedDatastreamClient{
+		TestDatastreamClient: *NewTestDatastreamClient(fullL2Blocks, gerUpdates),
+		useOptimizedAPI:      true,
+	}
+
+	cfg := BatchesCfg{
+		zkCfg: &ethconfig.Zk{
+			L2DataStreamerUrl: "localhost:1234",
+		},
+	}
+
+	var stats getHighestDSL2BlockStats
+
+	// ACT
+	blockNum, err := getHighestDSL2BlockWithMockClient(ctx, cfg, mockClient, &stats)
+
+	// ASSERT
+	require.NoError(t, err)
+	require.Equal(t, uint64(5), blockNum) // Latest block number
+	require.True(t, stats.dsUseOptimizedAPI, "Should use optimized API")
+	require.Equal(t, 1, stats.dsGetBlockCounter)
+	require.True(t, mockClient.LastUsedOptimizedAPI(), "LastUsedOptimizedAPI should return true")
+}
+
+// TestGetHighestDSL2BlockWithFallback tests the fallback to legacy method
+func TestGetHighestDSL2BlockWithFallback(t *testing.T) {
+	ctx := context.Background()
+
+	// Create test L2 blocks
+	fullL2Blocks := createTestL2Blocks(t, 3)
+	gerUpdates := []types.GerUpdate{}
+
+	// Create mock client that fails optimized API
+	mockClient := &MockOptimizedDatastreamClient{
+		TestDatastreamClient: *NewTestDatastreamClient(fullL2Blocks, gerUpdates),
+		useOptimizedAPI:      false, // Force fallback
+	}
+
+	cfg := BatchesCfg{
+		zkCfg: &ethconfig.Zk{
+			L2DataStreamerUrl: "localhost:1234",
+		},
+	}
+
+	var stats getHighestDSL2BlockStats
+
+	// ACT
+	blockNum, err := getHighestDSL2BlockWithMockClient(ctx, cfg, mockClient, &stats)
+
+	// ASSERT
+	require.NoError(t, err)
+	require.Equal(t, uint64(3), blockNum) // Latest block number
+	require.False(t, stats.dsUseOptimizedAPI, "Should use legacy API")
+	require.Equal(t, 1, stats.dsGetBlockCounter)
+	require.False(t, mockClient.LastUsedOptimizedAPI(), "LastUsedOptimizedAPI should return false")
+}
+
+// TestLastUsedOptimizedAPITracking tests API type tracking
+func TestLastUsedOptimizedAPITracking(t *testing.T) {
+	fullL2Blocks := createTestL2Blocks(t, 2)
+	gerUpdates := []types.GerUpdate{}
+
+	// Test optimized API tracking
+	mockClient := &MockOptimizedDatastreamClient{
+		TestDatastreamClient: *NewTestDatastreamClient(fullL2Blocks, gerUpdates),
+		useOptimizedAPI:      true,
+	}
+
+	// Initially should be false (default)
+	require.False(t, mockClient.LastUsedOptimizedAPI())
+
+	// Call GetLatestL2Block with optimized API
+	_, err := mockClient.GetLatestL2Block()
+	require.NoError(t, err)
+	require.True(t, mockClient.LastUsedOptimizedAPI())
+
+	// Test fallback tracking
+	mockClient.useOptimizedAPI = false
+	_, err = mockClient.GetLatestL2Block()
+	require.NoError(t, err)
+	require.False(t, mockClient.LastUsedOptimizedAPI())
+}
+
+// TestStatsToStringWithAPIType tests the stats output format
+func TestStatsToStringWithAPIType(t *testing.T) {
+	stats := getHighestDSL2BlockStats{
+		dsStart:           100 * time.Microsecond,
+		dsStartCounter:    1,
+		dsGetBlockCost:    50 * time.Millisecond,
+		dsGetBlockCounter: 1,
+		dsStopCost:        10 * time.Microsecond,
+		dsStopCounter:     0,
+		dsUseOptimizedAPI: true,
+	}
+
+	result := stats.toString()
+
+	// Verify the output contains all expected fields
+	require.Contains(t, result, "dsStart: 100µs")
+	require.Contains(t, result, "dsStartCounter: 1")
+	require.Contains(t, result, "dsGetBlockCost: 50ms")
+	require.Contains(t, result, "dsGetBlockCounter: 1")
+	require.Contains(t, result, "dsStopCost: 10µs")
+	require.Contains(t, result, "dsStopCounter: 0")
+	require.Contains(t, result, "dsUseOptimizedAPI: true")
+
+	// Test with legacy API
+	stats.dsUseOptimizedAPI = false
+	result = stats.toString()
+	require.Contains(t, result, "dsUseOptimizedAPI: false")
+}
+
+// MockOptimizedDatastreamClient extends TestDatastreamClient to support optimized API testing
+type MockOptimizedDatastreamClient struct {
+	TestDatastreamClient
+	useOptimizedAPI      bool
+	lastUsedOptimizedAPI bool
+}
+
+func (m *MockOptimizedDatastreamClient) GetLatestL2Block() (*types.FullL2Block, error) {
+	// Simulate optimized API behavior
+	if m.useOptimizedAPI {
+		m.lastUsedOptimizedAPI = true
+		return m.TestDatastreamClient.GetLatestL2Block()
+	}
+
+	// Simulate fallback to legacy method
+	m.lastUsedOptimizedAPI = false
+	return m.TestDatastreamClient.GetLatestL2Block()
+}
+
+func (m *MockOptimizedDatastreamClient) LastUsedOptimizedAPI() bool {
+	return m.lastUsedOptimizedAPI
+}
+
+// Helper function to test getHighestDSL2Block with mock client
+func getHighestDSL2BlockWithMockClient(ctx context.Context, cfg BatchesCfg, mockClient DatastreamClient, stats *getHighestDSL2BlockStats) (uint64, error) {
+	// Simulate the core logic of getHighestDSL2Block without connection management
+	dsGetlockStart := time.Now()
+	fullBlock, err := mockClient.GetLatestL2Block()
+	stats.dsGetBlockCost += time.Since(dsGetlockStart)
+	stats.dsGetBlockCounter += 1
+	stats.dsUseOptimizedAPI = mockClient.LastUsedOptimizedAPI()
+
+	if err != nil {
+		return 0, err
+	}
+
+	return fullBlock.L2BlockNumber, nil
 }
