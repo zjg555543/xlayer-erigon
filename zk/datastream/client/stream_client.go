@@ -75,6 +75,9 @@ type StreamClient struct {
 
 	useTLS    bool
 	tlsConfig *tls.Config
+
+	// X Layer optimization: track last used API type
+	lastUsedOptimizedAPI atomic.Bool
 }
 
 const (
@@ -258,6 +261,66 @@ func (c *StreamClient) stopStreaming() error {
 }
 
 func (c *StreamClient) getLatestL2Block() (l2Block *types.FullL2Block, err error) {
+	// Try optimized API first (X Layer enhancement)
+	l2Block, err = c.getLatestL2BlockOptimized()
+	if err == nil {
+		c.lastUsedOptimizedAPI.Store(true)
+		log.Debug("[Datastream client] getLatestL2Block using optimized API succeeded")
+		return l2Block, nil
+	}
+
+	// Optimized API failed, fall back to legacy method
+	c.lastUsedOptimizedAPI.Store(false)
+	log.Debug("[Datastream client] getLatestL2Block using optimized API failed, using legacy method", "error", err)
+	return c.getLatestL2BlockLegacy()
+}
+
+// LastUsedOptimizedAPI returns whether the last GetLatestL2Block call used the optimized API
+func (c *StreamClient) LastUsedOptimizedAPI() bool {
+	return c.lastUsedOptimizedAPI.Load()
+}
+
+// getLatestL2BlockOptimized tries to use the new CmdLatestL2Block command
+func (c *StreamClient) getLatestL2BlockOptimized() (l2Block *types.FullL2Block, err error) {
+	if err := c.sendLatestL2BlockCmd(); err != nil {
+		return nil, fmt.Errorf("sendLatestL2BlockCmd: %w", err)
+	}
+
+	// Read packet
+	packet, err := c.readBuffer(1)
+	if err != nil {
+		return nil, fmt.Errorf("readBuffer: %w", err)
+	}
+
+	// Check packet type
+	if packet[0] != PtResult {
+		return nil, fmt.Errorf("expecting result packet type %d and received %d", PtResult, packet[0])
+	}
+
+	// Read server result entry for the command
+	if _, err := c.readResultEntry(packet); err != nil {
+		return nil, fmt.Errorf("readResultEntry: %w", err)
+	}
+
+	// Read the L2Block entry directly
+	entry, err := c.NextFileEntry()
+	if err != nil {
+		return nil, fmt.Errorf("NextFileEntry: %w", err)
+	}
+
+	if entry.EntryType != types.EntryTypeL2Block {
+		return nil, fmt.Errorf("expected L2Block entry type %d but got %d", types.EntryTypeL2Block, entry.EntryType)
+	}
+
+	if l2Block, err = types.UnmarshalL2Block(entry.Data); err != nil {
+		return nil, fmt.Errorf("UnmarshalL2Block: %w", err)
+	}
+
+	return l2Block, nil
+}
+
+// getLatestL2BlockLegacy uses the original backward search method
+func (c *StreamClient) getLatestL2BlockLegacy() (l2Block *types.FullL2Block, err error) {
 	h, err := c.GetHeader()
 	if err != nil {
 		return nil, fmt.Errorf("GetHeader: %w", err)
