@@ -214,9 +214,9 @@ func SpawnStageBatches(
 
 		getHighestDSL2BlockCounter++
 		highestDSL2Block, err = getHighestDSL2Block(logPrefix, ctx, cfg, uint16(latestForkId), &stats)
-		if err != nil {
+		if err != nil || highestDSL2Block == 0 {
 			// if we return error, stage will replay and block all other stages
-			log.Warn(fmt.Sprintf("[%s] Failed to get latest l2 block from datastream: %v", logPrefix, err))
+			log.Warn(fmt.Sprintf("[%s] Failed to get latest l2 block %v from datastream: %v", logPrefix, highestDSL2Block, err))
 			// because this is likely something network related lets put a pause here for just a couple of
 			// seconds to save the node going into a crazy loop
 			time.Sleep(2 * time.Second)
@@ -886,8 +886,6 @@ func getHighestDSL2Block(logPrefix string, ctx context.Context, batchCfg Batches
 	stats.dsGetBlockCounter += 1
 	stats.dsUseOptimizedAPI = dsClient.LastUsedOptimizedAPI()
 	if err != nil {
-		// Mark client as failed for next call to recreate
-		markQueryClientError(err)
 		return 0, err
 	}
 

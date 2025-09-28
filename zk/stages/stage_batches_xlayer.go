@@ -12,7 +12,6 @@ import (
 // This is an X Layer optimization to reduce TCP connection overhead
 type queryClientManager struct {
 	client     *client.StreamClient
-	lastError  error
 	ctx        context.Context
 	cfg        BatchesCfg
 	latestFork uint16
@@ -27,36 +26,24 @@ func newQueryClientManager(ctx context.Context, cfg BatchesCfg, latestFork uint1
 	}
 }
 
-// getOrCreateClient returns a healthy client, creating new one if needed
+// getOrCreateClient returns a healthy client, using HandleStart pattern for connection management
 func (qcm *queryClientManager) getOrCreateClient() (*client.StreamClient, error) {
-	// If we have an error or no client, recreate
-	if qcm.client == nil || qcm.lastError != nil {
-		if qcm.client != nil {
-			// Clean up old connection
-			if err := qcm.client.Stop(); err != nil {
-				log.Info("Failed to stop old query client", "error", err)
-			}
-		}
-
-		// Create and start new client
+	// Create client if not exists
+	if qcm.client == nil {
 		log.Info("Creating new query client for L2Block queries")
 		qcm.client = buildNewStreamClient(qcm.ctx, qcm.cfg, qcm.latestFork)
-		if err := qcm.client.Start(); err != nil {
-			qcm.lastError = err
-			qcm.client = nil
-			return nil, fmt.Errorf("failed to start query client: %w", err)
-		}
-		qcm.lastError = nil
-		log.Info("New query client created and started successfully")
+	}
+
+	// Use HandleStart for intelligent connection management
+	// This handles both initial startup and error recovery automatically
+	if err := qcm.client.HandleStart(); err != nil {
+		// Don't immediately discard client - let HandleStart retry on next call
+		// Network errors are handled by HandleStart internally, just return error
+		log.Info("Query client HandleStart failed, will retry", "error", err)
+		return nil, fmt.Errorf("failed to start/reconnect query client: %w", err)
 	}
 
 	return qcm.client, nil
-}
-
-// markError marks the current client as failed for next recreation
-func (qcm *queryClientManager) markError(err error) {
-	qcm.lastError = err
-	log.Info("Query client marked as failed", "error", err)
 }
 
 // Global query client manager for high-frequency L2Block queries
@@ -71,11 +58,4 @@ func getOrCreateQueryClient(ctx context.Context, cfg BatchesCfg, latestFork uint
 	}
 
 	return globalQueryManager.getOrCreateClient()
-}
-
-// markQueryClientError marks the global query client as failed
-func markQueryClientError(err error) {
-	if globalQueryManager != nil {
-		globalQueryManager.markError(err)
-	}
 }
