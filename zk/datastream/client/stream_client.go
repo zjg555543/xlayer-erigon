@@ -393,7 +393,7 @@ func (c *StreamClient) Stop() error {
 // If started, terminate the connection.
 func (c *StreamClient) GetHeader() (*types.HeaderEntry, error) {
 	startT := time.Now()
-	log.Info("[Datastream client] Getting header", "client", c.conn)
+	log.Debug("[Datastream client] Getting header", "client", c.conn)
 	if err := c.stopStreaming(); err != nil {
 		return nil, fmt.Errorf("stopStreaming: %w", err)
 	}
@@ -425,14 +425,14 @@ func (c *StreamClient) GetHeader() (*types.HeaderEntry, error) {
 	}
 
 	c.header = h
-	log.Info("[Datastream client] getHeader", "header", c.header, "timecost", common_util.PrettyDuration(time.Since(startT)))
+	log.Debug("[Datastream client] getHeader", "header", c.header, "timecost", common_util.PrettyDuration(time.Since(startT)))
 
 	return h, nil
 }
 
 // sendEntryCmdWrapper sends CmdEntry command and reads packet type and decodes result entry.
 func (c *StreamClient) sendEntryCmdWrapper(entryNum uint64) error {
-	log.Info("[Datastream client] Sending entry command", "entryNum", entryNum)
+	log.Debug("[Datastream client] Sending entry command", "entryNum", entryNum)
 	if err := c.sendEntryCmd(entryNum); err != nil {
 		return fmt.Errorf("sendEntryCmd: %w", err)
 	}
