@@ -66,6 +66,7 @@ type DatastreamClient interface {
 	GetEntryChan() *chan interface{}
 	GetL2BlockByNumber(blockNum uint64) (*types.FullL2Block, error)
 	GetLatestL2Block() (*types.FullL2Block, error)
+	LastUsedOptimizedAPI() bool
 	GetProgressAtomic() *atomic.Uint64
 	Start() error
 	Stop() error
@@ -213,9 +214,9 @@ func SpawnStageBatches(
 
 		getHighestDSL2BlockCounter++
 		highestDSL2Block, err = getHighestDSL2Block(logPrefix, ctx, cfg, uint16(latestForkId), &stats)
-		if err != nil {
+		if err != nil || highestDSL2Block == 0 {
 			// if we return error, stage will replay and block all other stages
-			log.Warn(fmt.Sprintf("[%s] Failed to get latest l2 block from datastream: %v", logPrefix, err))
+			log.Warn(fmt.Sprintf("[%s] Failed to get latest l2 block %v from datastream: %v", logPrefix, highestDSL2Block, err))
 			// because this is likely something network related lets put a pause here for just a couple of
 			// seconds to save the node going into a crazy loop
 			time.Sleep(2 * time.Second)
@@ -238,7 +239,7 @@ func SpawnStageBatches(
 			}
 		}
 		// For X Layer
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 	getHighestDSL2BlockCost := time.Since(getHighestDSL2Blockstart)
 
@@ -854,59 +855,36 @@ func newStreamClient(ctx context.Context, cfg BatchesCfg, latestForkId uint64) (
 }
 
 type getHighestDSL2BlockStats struct {
-	getSeqCost        time.Duration
-	getSeqCounter     int
 	dsStart           time.Duration
 	dsStartCounter    int
 	dsGetBlockCost    time.Duration
 	dsGetBlockCounter int
 	dsStopCost        time.Duration
 	dsStopCounter     int
+	dsUseOptimizedAPI bool
 }
 
 func (stats getHighestDSL2BlockStats) toString() string {
-	return fmt.Sprintf("getHighestDSL2BlockStats {getSeqCost: %v, getSeqCounter: %d, dsStart: %v, dsStartCounter: %d, dsGetBlockCost: %v, dsGetBlockCounter: %d, dsStopCost: %v, dsStopCounter: %d}",
-		stats.getSeqCost, stats.getSeqCounter, stats.dsStart, stats.dsStartCounter, stats.dsGetBlockCost, stats.dsGetBlockCounter, stats.dsStopCost, stats.dsStopCounter)
+	return fmt.Sprintf("getHighestDSL2BlockStats {dsStart: %v, dsStartCounter: %d, dsGetBlockCost: %v, dsGetBlockCounter: %d, dsStopCost: %v, dsStopCounter: %d, dsUseOptimizedAPI: %t}",
+		stats.dsStart, stats.dsStartCounter, stats.dsGetBlockCost, stats.dsGetBlockCounter, stats.dsStopCost, stats.dsStopCounter, stats.dsUseOptimizedAPI)
 }
 
 func getHighestDSL2Block(logPrefix string, ctx context.Context, batchCfg BatchesCfg, latestFork uint16, stats *getHighestDSL2BlockStats) (uint64, error) {
-	cfg := batchCfg.zkCfg
-
-	// first try the sequencer rpc endpoint, it might not have been upgraded to the
-	// latest version yet so if we get an error back from this call we can try the older
-	// method of calling the datastream directly
-	getSeqStart := time.Now()
-	highestBlock, err := GetSequencerHighestDataStreamBlock(cfg.L2RpcUrl)
-	stats.getSeqCost += time.Since(getSeqStart)
-	stats.getSeqCounter += 1
-	if err == nil {
-		return highestBlock, nil
-	}
-
-	// so something went wrong with the rpc call, let's try the older method,
-	// but we're going to open a new connection rather than use the one for syncing blocks.
-	// This is so we can keep the logic simple and just dispose of the connection when we're done
-	// greatly simplifying state juggling of the connection if it errors
+	// Get or create reusable client (X Layer optimization)
 	getDSStart := time.Now()
-	dsClient := buildNewStreamClient(ctx, batchCfg, latestFork)
-	err = dsClient.Start()
+	dsClient, err := getOrCreateQueryClient(ctx, batchCfg, latestFork)
 	stats.dsStart += time.Since(getDSStart)
 	stats.dsStartCounter += 1
 	if err != nil {
 		return 0, err
 	}
-	defer func() {
-		dsStopStart := time.Now()
-		if err := dsClient.Stop(); err != nil {
-			log.Error("problem stopping datastream client looking up latest ds l2 block", "err", err)
-		}
-		stats.dsStopCost += time.Since(dsStopStart)
-		stats.dsStopCounter += 1
-	}()
+
+	// Query latest L2Block using reused connection
 	dsGetlockStart := time.Now()
 	fullBlock, err := dsClient.GetLatestL2Block()
 	stats.dsGetBlockCost += time.Since(dsGetlockStart)
 	stats.dsGetBlockCounter += 1
+	stats.dsUseOptimizedAPI = dsClient.LastUsedOptimizedAPI()
 	if err != nil {
 		return 0, err
 	}
