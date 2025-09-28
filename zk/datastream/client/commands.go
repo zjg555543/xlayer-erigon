@@ -11,6 +11,11 @@ const (
 	CmdBookmark      // CmdBookmark for the get bookmark TCP client command
 )
 
+const (
+	// Custom X Layer commands - use 1000+ range to avoid conflicts with upstream
+	CmdLatestL2Block Command = 1001 // CmdLatestL2Block for the optimized get latest L2Block command
+)
+
 // sendHeaderCmd sends the header command to the server.
 func (c *StreamClient) sendHeaderCmd() error {
 	return c.sendCommand(CmdHeader)
@@ -59,6 +64,11 @@ func (c *StreamClient) sendEntryCmd(entryNum uint64) error {
 
 	// Send entry number
 	return c.writeToConn(entryNum)
+}
+
+// sendLatestL2BlockCmd sends the optimized get latest L2Block command to the server.
+func (c *StreamClient) sendLatestL2BlockCmd() error {
+	return c.sendCommand(CmdLatestL2Block)
 }
 
 // sendHeaderCmd sends the header command to the server.

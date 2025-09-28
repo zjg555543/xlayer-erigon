@@ -83,6 +83,11 @@ func (c *TestDatastreamClient) GetLatestL2Block() (*types.FullL2Block, error) {
 	return &c.fullL2Blocks[len(c.fullL2Blocks)-1], nil
 }
 
+func (c *TestDatastreamClient) LastUsedOptimizedAPI() bool {
+	// Test client always returns false (uses legacy method)
+	return false
+}
+
 func (c *TestDatastreamClient) GetLastWrittenTimeAtomic() *atomic.Int64 {
 	return &c.lastWrittenTimeAtomic
 }

@@ -304,23 +304,51 @@ func TestStreamClientGetLatestL2Block(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		// Read the Command
-		if err := readAndValidateUint(t, serverConn, uint64(CmdHeader), "command"); err != nil {
-			errCh <- err
+		// First, try to read CmdLatestL2Block (optimized API)
+		// Read the Command - expect CmdLatestL2Block first
+		if err := readAndValidateUint(t, serverConn, uint64(CmdLatestL2Block), "command"); err != nil {
+			errCh <- fmt.Errorf("failed to read CmdLatestL2Block: %w", err)
 			return
 		}
 
 		// Read the StreamType
 		if err := readAndValidateUint(t, serverConn, uint64(StSequencer), streamTypeFieldName); err != nil {
-			errCh <- err
+			errCh <- fmt.Errorf("failed to read stream type for optimized API: %w", err)
 			return
 		}
 
-		// Write ResultEntry
+		// Simulate optimized API failure by sending an error result
+		errorRe := &types.ResultEntry{
+			PacketType: PtResult,
+			ErrorNum:   1, // Non-zero indicates error
+			Length:     types.ResultEntryMinSize + 20,
+			ErrorStr:   []byte("optimized API not supported"),
+		}
+		_, err = serverConn.Write(errorRe.Encode())
+		if err != nil {
+			errCh <- fmt.Errorf("failed to write error result entry: %w", err)
+			return
+		}
+
+		// Now handle the fallback to legacy method
+		// Read the Command - expect CmdHeader
+		if err := readAndValidateUint(t, serverConn, uint64(CmdHeader), "command"); err != nil {
+			errCh <- fmt.Errorf("failed to read CmdHeader: %w", err)
+			return
+		}
+
+		// Read the StreamType
+		if err := readAndValidateUint(t, serverConn, uint64(StSequencer), streamTypeFieldName); err != nil {
+			errCh <- fmt.Errorf("failed to read stream type for header: %w", err)
+			return
+		}
+
+		// Write ResultEntry for header command
 		re := createResultEntry(t)
 		_, err = serverConn.Write(re.Encode())
 		if err != nil {
 			errCh <- fmt.Errorf("failed to write result entry to the connection: %w", err)
+			return
 		}
 
 		// Write HeaderEntry
@@ -335,30 +363,31 @@ func TestStreamClientGetLatestL2Block(t *testing.T) {
 		_, err = serverConn.Write(he.Encode())
 		if err != nil {
 			errCh <- fmt.Errorf("failed to write header entry to the connection: %w", err)
+			return
 		}
 
-		// Read the Command
+		// Read the Command - expect CmdEntry
 		if err := readAndValidateUint(t, serverConn, uint64(CmdEntry), "command"); err != nil {
-			errCh <- err
+			errCh <- fmt.Errorf("failed to read CmdEntry: %w", err)
 			return
 		}
 
 		// Read the StreamType
 		if err := readAndValidateUint(t, serverConn, uint64(StSequencer), streamTypeFieldName); err != nil {
-			errCh <- err
+			errCh <- fmt.Errorf("failed to read stream type for entry: %w", err)
 			return
 		}
 
 		// Read the EntryNumber
 		if err := readAndValidateUint(t, serverConn, he.TotalEntries-1, "entry number"); err != nil {
-			errCh <- err
+			errCh <- fmt.Errorf("failed to read entry number: %w", err)
 			return
 		}
 
-		// Write the ResultEntry
+		// Write the ResultEntry for entry command
 		_, err = serverConn.Write(re.Encode())
 		if err != nil {
-			errCh <- fmt.Errorf("failed to write result entry to the connection: %w", err)
+			errCh <- fmt.Errorf("failed to write result entry for entry command: %w", err)
 			return
 		}
 
