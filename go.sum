@@ -849,8 +849,8 @@ github.com/nxadm/tail v1.4.9-0.20211216163028-4472660a31a6 h1:iZ5rEHU561k2tdi/at
 github.com/nxadm/tail v1.4.9-0.20211216163028-4472660a31a6/go.mod h1:A+9rV4WFp4DKg1Ym1v6YtCrJ2vvlt1ZA/iml0CNuu2A=
 github.com/okx/poseidongold v0.0.3 h1:bb6cN2J2WVJDcqOUvIQI9wkLaEwRdqhB9eCEm/Cpb4E=
 github.com/okx/poseidongold v0.0.3/go.mod h1:5ZSHtmCUvyWfMhQH+9wi6b41z4JJwgO06baYZdBPRXw=
-github.com/okx/xlayer-data-streamer v0.4.1-rc1 h1:kXcyDMWKOq12TgzjY+I9Hs++M+KgwzVPmpEi90wacVY=
-github.com/okx/xlayer-data-streamer v0.4.1-rc1/go.mod h1:7nM7Ihk+fTG1TQPwdZoGOYd3wprqqyIyjtS514uHzWE=
+github.com/okx/xlayer-data-streamer v0.4.1-rc2 h1:tK3qk6Y2B3EsnyUCIUdbPNokcyfNXfwwZI4ikBhK1Eg=
+github.com/okx/xlayer-data-streamer v0.4.1-rc2/go.mod h1:7nM7Ihk+fTG1TQPwdZoGOYd3wprqqyIyjtS514uHzWE=
 github.com/onsi/ginkgo v1.6.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
 github.com/onsi/ginkgo v1.7.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
 github.com/onsi/ginkgo v1.12.1/go.mod h1:zj2OWP4+oCPe1qIXoGWkgMRwljMUYCdkwsT2108oapk=

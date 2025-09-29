@@ -78,6 +78,8 @@ type XLayerConfig struct {
 	SyncSeqLogs bool
 
 	SequencerPaused bool
+
+	DataStreamBatchOptimizationEnabled bool
 }
 
 var DefaultXLayerConfig = XLayerConfig{}

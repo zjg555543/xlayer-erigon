@@ -62,6 +62,7 @@ type HermezDb interface {
 type DatastreamClient interface {
 	RenewEntryChannel()
 	ReadAllEntriesToChannel() error
+	ReadAllEntriesToChannelOptimized() error // X Layer optimization: batch streaming with 1 TCP call
 	StopReadingToChannel()
 	GetEntryChan() *chan interface{}
 	GetL2BlockByNumber(blockNum uint64) (*types.FullL2Block, error)
@@ -293,7 +294,15 @@ func SpawnStageBatches(
 	// start routine to download blocks and push them in a channel
 	errorChan := make(chan struct{})
 	dsClientRunner := NewDatastreamClientRunner(dsQueryClient, logPrefix)
-	dsClientRunner.StartRead(errorChan)
+
+	// Use optimized batch streaming if enabled (reduces TCP calls from 4 to 1)
+	if cfg.zkCfg.XLayer.DataStreamBatchOptimizationEnabled {
+		log.Info(fmt.Sprintf("[%s] Using optimized batch streaming", logPrefix))
+		dsClientRunner.StartReadOptimized(errorChan)
+	} else {
+		log.Info(fmt.Sprintf("[%s] Using standard streaming", logPrefix))
+		dsClientRunner.StartRead(errorChan)
+	}
 	defer dsClientRunner.StopRead()
 
 	entryChan := dsQueryClient.GetEntryChan()

@@ -39,6 +39,7 @@ var (
 	// ErrFileEntryNotFound denotes error that is returned when the certain file entry is not found in the datastream
 	ErrFileEntryNotFound       = errors.New("file entry not found")
 	ErrReachedEntryNumberLimit = errors.New("reached entry number limit") // For X Layer, fix ds receive issue
+	ErrBatchEndReceived        = errors.New("batch end signal received")  // For X Layer, batch streaming optimization
 	minimumCheckTimeout        = 500 * time.Millisecond
 )
 
@@ -85,11 +86,12 @@ const (
 	StSequencer StreamType = 1
 
 	// Packet types
-	PtPadding = 0
-	PtHeader  = 1    // Just for the header page
-	PtData    = 2    // Data entry
-	PtDataRsp = 0xfe // PtDataRsp is packet type for command response with data
-	PtResult  = 0xff // Not stored/present in file (just for client command result)
+	PtPadding  = 0
+	PtHeader   = 1    // Just for the header page
+	PtData     = 2    // Data entry
+	PtBatchEnd = 0x0f // PtBatchEnd is packet type to signal end of batch transmission
+	PtDataRsp  = 0xfe // PtDataRsp is packet type for command response with data
+	PtResult   = 0xff // Not stored/present in file (just for client command result)
 )
 
 // Creates a new client fo datastream
@@ -530,6 +532,29 @@ func (c *StreamClient) ReadAllEntriesToChannel() (err error) {
 	return nil
 }
 
+// ReadAllEntriesToChannelOptimized uses CmdStartBookmarkBatch to reduce TCP calls from 4 to 1
+// This is an X Layer optimization that combines header + bookmark + data streaming into a single command
+func (c *StreamClient) ReadAllEntriesToChannelOptimized() (err error) {
+	defer func() {
+		if err != nil {
+			c.lastError = err
+		}
+	}()
+	select {
+	case <-c.ctx.Done():
+		return fmt.Errorf("context done - stopping")
+	default:
+	}
+
+	log.Info("[Datastream client] Using optimized batch mode")
+
+	if err = c.readAllEntriesToChannelOptimized(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // reads entries to the end of the stream
 // at end will wait for new entries to arrive
 func (c *StreamClient) readAllEntriesToChannel() (err error) {
@@ -558,6 +583,114 @@ func (c *StreamClient) readAllEntriesToChannel() (err error) {
 	}
 
 	return
+}
+
+// readAllEntriesToChannelOptimized uses CmdStartBookmarkBatch for optimized streaming
+// This eliminates the need for separate GetHeader() and initiateDownloadBookmark() calls
+func (c *StreamClient) readAllEntriesToChannelOptimized() (err error) {
+	c.stopReadingToChannel.Store(false)
+
+	var bookmark *types.BookmarkProto
+	progress := c.progress.Load()
+	if progress == 0 {
+		bookmark = types.NewBookmarkProto(0, datastream.BookmarkType_BOOKMARK_TYPE_BATCH)
+	} else {
+		bookmark = types.NewBookmarkProto(progress+1, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
+	}
+
+	protoBookmark, err := bookmark.Marshal()
+	if err != nil {
+		return err
+	}
+
+	// Single optimized call - replaces stopStreaming + GetHeader + initiateDownloadBookmark
+	if err := c.sendBookmarkBatchCmd(protoBookmark); err != nil {
+		return fmt.Errorf("sendBookmarkBatchCmd: %w", err)
+	}
+
+	c.setStreaming(true)
+
+	// Read result entry for the batch command
+	if _, err := c.readPacketAndDecodeResultEntry(); err != nil {
+		return fmt.Errorf("readPacketAndDecodeResultEntry: %w", err)
+	}
+
+	// Read all data using the optimized batch streaming
+	if err := c.readAllFullL2BlocksToChannelOptimized(); err != nil {
+		return fmt.Errorf("readAllFullL2BlocksToChannelOptimized: %w", err)
+	}
+
+	return nil
+}
+
+// readAllFullL2BlocksToChannelOptimized reads all entries using batch streaming
+// This method handles PtBatchEnd signals and optimized batch reception
+func (c *StreamClient) readAllFullL2BlocksToChannelOptimized() (err error) {
+	log.Info("[Datastream client] reading full L2 blocks to channel (optimized batch mode)")
+
+	readNewProto := true
+	parsedProto := interface{}(nil)
+LOOP:
+	for {
+		select {
+		default:
+		case <-c.ctx.Done():
+			return fmt.Errorf("context done - stopping")
+		}
+
+		if c.stopReadingToChannel.Load() {
+			break LOOP
+		}
+
+		err = c.resetReadTimeout()
+		if err != nil {
+			return err
+		}
+
+		if readNewProto {
+			if parsedProto, _, err = ReadParsedProto(c); err != nil {
+				// For X Layer, fix ds receive issue
+				if err == ErrReachedEntryNumberLimit {
+					return c.trySendStopSignal()
+				}
+				// Handle batch end signal
+				if err == ErrBatchEndReceived {
+					log.Info("[Datastream client] Batch streaming completed")
+					return c.trySendStopSignal()
+				}
+				return err
+			}
+			readNewProto = false
+		}
+		c.lastWrittenTime.Store(time.Now().UnixNano())
+
+		switch parsedProto := parsedProto.(type) {
+		case *types.BookmarkProto:
+			readNewProto = true
+			continue
+		case *types.BatchStart:
+			c.currentFork = parsedProto.ForkId
+		case *types.GerUpdate:
+		case *types.BatchEnd:
+		case *types.FullL2Block:
+			parsedProto.ForkId = c.currentFork
+			log.Trace("[Datastream client] writing block to channel (optimized)", "blockNumber", parsedProto.L2BlockNumber, "batchNumber", parsedProto.BatchNumber)
+		default:
+			return fmt.Errorf("unexpected entry type: %v", parsedProto)
+		}
+		select {
+		case c.entryChan <- parsedProto:
+			readNewProto = true
+		default:
+			time.Sleep(10 * time.Microsecond)
+		}
+
+		// In batch mode, we don't rely on header.TotalEntries to determine end
+		// Instead, we wait for the PtBatchEnd signal from the server
+		// The loop will exit when ErrBatchEndReceived is returned from ReadParsedProto
+	}
+
+	return nil
 }
 
 // runs the prerequisites for entries download
@@ -862,8 +995,12 @@ func (c *StreamClient) NextFileEntry() (file *types.FileEntry, err error) {
 			return file, fmt.Errorf("readResultEntry: %w", err)
 		}
 		return file, nil
+	} else if packetType == PtBatchEnd {
+		// Batch end signal received - return nil to indicate end of batch
+		log.Debug("[Datastream client] Received batch end signal")
+		return nil, ErrBatchEndReceived
 	} else if packetType != PtData && packetType != PtDataRsp {
-		return file, fmt.Errorf("expected data packet type %d or %d and received %d", PtData, PtDataRsp, packetType)
+		return file, fmt.Errorf("expected data packet type %d, %d or %d and received %d", PtData, PtDataRsp, PtBatchEnd, packetType)
 	}
 
 	// Read the rest of fixed size fields
@@ -1070,4 +1207,9 @@ func (c *StreamClient) setReadTimeout(timeout time.Duration) error {
 
 func (c *StreamClient) setWriteTimeout(timeout time.Duration) error {
 	return c.conn.SetWriteDeadline(time.Now().Add(timeout))
+}
+
+// ExecCommandStartBookmarkBatch executes client TCP command to start batch streaming from bookmark
+func (c *StreamClient) ExecCommandStartBookmarkBatch(fromBookmark []byte) error {
+	return c.sendBookmarkBatchCmd(fromBookmark)
 }

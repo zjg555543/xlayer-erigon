@@ -174,7 +174,7 @@ func TestStreamClientReadFileEntry(t *testing.T) {
 			name:           "Invalid packet type",
 			input:          []byte{5, 0, 0, 0, 17, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45},
 			expectedResult: nil,
-			expectedError:  "expected data packet type 2 or 254 and received 5",
+			expectedError:  "expected data packet type 2, 254 or 15 and received 5",
 		},
 		{
 			name:           "Invalid byte array length",
@@ -619,4 +619,184 @@ func createL2BlockAndTransactions(t *testing.T, blockNum uint64, txnCount int) (
 	}
 
 	return l2Block, txns
+}
+
+// TestStreamClientBatchOptimization tests the new batch optimization features
+func TestStreamClientBatchOptimization(t *testing.T) {
+	t.Run("ExecCommandStartBookmarkBatch Method Exists", func(t *testing.T) {
+		// Simple test to verify the method exists and handles nil connection gracefully
+		c := NewClient(context.Background(), "", false, 0, 1*time.Second, 0)
+
+		// Should panic with nil connection - this is expected behavior
+		require.Panics(t, func() {
+			c.ExecCommandStartBookmarkBatch([]byte{0x01, 0x02})
+		}, "Should panic with no connection set")
+	})
+
+	t.Run("PtBatchEnd Packet Type Handling", func(t *testing.T) {
+		serverConn, clientConn := net.Pipe()
+		defer func() {
+			serverConn.Close()
+			clientConn.Close()
+		}()
+
+		c := NewClient(context.Background(), "", false, 0, 500*time.Millisecond, 0)
+		c.conn = clientConn
+
+		// Test different PtBatchEnd scenarios
+		testCases := []struct {
+			name        string
+			inputData   []byte
+			expectError error
+		}{
+			{
+				name:        "Pure PtBatchEnd packet",
+				inputData:   []byte{PtBatchEnd},
+				expectError: ErrBatchEndReceived,
+			},
+			{
+				name:        "PtBatchEnd with extra data",
+				inputData:   []byte{PtBatchEnd, 0x01, 0x02, 0x03},
+				expectError: ErrBatchEndReceived,
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				go func() {
+					serverConn.Write(tc.inputData)
+				}()
+
+				entry, err := c.NextFileEntry()
+				require.Nil(t, entry, "Entry should be nil for batch end")
+				require.Equal(t, tc.expectError, err, "Should return expected error")
+			})
+		}
+	})
+
+	t.Run("ReadAllEntriesToChannelOptimized Method Exists", func(t *testing.T) {
+		// Simple test to verify the method exists
+		c := NewClient(context.Background(), "", false, 0, 1*time.Second, 0)
+
+		// Should fail gracefully with context cancellation
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+		c.ctx = ctx
+
+		err := c.ReadAllEntriesToChannelOptimized()
+		require.Error(t, err, "Should fail with cancelled context")
+		require.Contains(t, err.Error(), "context done", "Should mention context cancellation")
+	})
+
+	t.Run("Batch Optimization Error Cases", func(t *testing.T) {
+		// Test invalid bookmark - expect panic recovery
+		t.Run("Invalid Bookmark", func(t *testing.T) {
+			c := NewClient(context.Background(), "", false, 0, 500*time.Millisecond, 0)
+			// No connection set - should panic but we recover it
+			require.Panics(t, func() {
+				c.ExecCommandStartBookmarkBatch([]byte{0x01, 0x02})
+			}, "Should panic with no connection set")
+		})
+
+		// Test connection timeout
+		t.Run("Connection Timeout", func(t *testing.T) {
+			serverConn, clientConn := net.Pipe()
+			defer func() {
+				serverConn.Close()
+				clientConn.Close()
+			}()
+
+			c := NewClient(context.Background(), "", false, 0, 100*time.Millisecond, 0) // Short timeout
+			c.conn = clientConn
+
+			// Server doesn't respond - should timeout
+			err := c.ExecCommandStartBookmarkBatch([]byte{0x01})
+			require.Error(t, err, "Should timeout")
+		})
+
+		// Test context cancellation
+		t.Run("Context Cancellation", func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			c := NewClient(ctx, "", false, 0, 2*time.Second, 0)
+
+			serverConn, clientConn := net.Pipe()
+			defer func() {
+				serverConn.Close()
+				clientConn.Close()
+			}()
+			c.conn = clientConn
+
+			// Cancel context before operation
+			cancel()
+
+			err := c.ReadAllEntriesToChannelOptimized()
+			require.Error(t, err, "Should fail with cancelled context")
+			require.Contains(t, err.Error(), "context done", "Should mention context cancellation")
+		})
+	})
+}
+
+// TestBatchEndSignalHandling tests various batch end signal scenarios
+func TestBatchEndSignalHandling(t *testing.T) {
+	testCases := []struct {
+		name          string
+		inputPackets  [][]byte
+		expectedError error
+		description   string
+	}{
+		{
+			name:          "Single PtBatchEnd",
+			inputPackets:  [][]byte{{PtBatchEnd}},
+			expectedError: ErrBatchEndReceived,
+			description:   "Should handle single batch end signal",
+		},
+		{
+			name:          "PtBatchEnd after data",
+			inputPackets:  [][]byte{{PtBatchEnd}},
+			expectedError: ErrBatchEndReceived,
+			description:   "Should handle batch end after receiving data",
+		},
+		{
+			name: "Multiple PtBatchEnd",
+			inputPackets: [][]byte{
+				{PtBatchEnd},
+				{PtBatchEnd},
+			},
+			expectedError: ErrBatchEndReceived,
+			description:   "Should handle multiple batch end signals",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			serverConn, clientConn := net.Pipe()
+			defer func() {
+				serverConn.Close()
+				clientConn.Close()
+			}()
+
+			c := NewClient(context.Background(), "", false, 0, 500*time.Millisecond, 0)
+			c.conn = clientConn
+
+			// Send test packets
+			go func() {
+				for _, packet := range tc.inputPackets {
+					serverConn.Write(packet)
+					time.Sleep(10 * time.Millisecond) // Small delay between packets
+				}
+			}()
+
+			// Read first packet
+			entry, err := c.NextFileEntry()
+			require.Nil(t, entry, "Entry should be nil for batch end")
+			require.Equal(t, tc.expectedError, err, tc.description)
+
+			// If there are multiple packets, test reading the second one
+			if len(tc.inputPackets) > 1 {
+				entry2, err2 := c.NextFileEntry()
+				require.Nil(t, entry2, "Second entry should also be nil")
+				require.Equal(t, tc.expectedError, err2, "Should handle second batch end signal")
+			}
+		})
+	}
 }

@@ -2,6 +2,7 @@ package stages
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 )
@@ -42,10 +43,12 @@ func (c *TestDatastreamClient) ReadAllEntriesToChannel() error {
 
 	c.entriesChan <- nil // needed to stop processing
 
-	for {
+	// Wait for stop signal with timeout to avoid infinite loop
+	for i := 0; i < 1000; i++ { // Max 1 second wait
 		if c.stopReadingToChannel.Load() {
 			break
 		}
+		time.Sleep(1 * time.Millisecond)
 	}
 
 	return nil
@@ -86,6 +89,13 @@ func (c *TestDatastreamClient) GetLatestL2Block() (*types.FullL2Block, error) {
 func (c *TestDatastreamClient) LastUsedOptimizedAPI() bool {
 	// Test client always returns false (uses legacy method)
 	return false
+}
+
+// ReadAllEntriesToChannelOptimized simulates the optimized batch streaming method
+func (c *TestDatastreamClient) ReadAllEntriesToChannelOptimized() error {
+	// For testing purposes, this behaves the same as the standard method
+	// but could be extended to simulate batch behavior
+	return c.ReadAllEntriesToChannel()
 }
 
 func (c *TestDatastreamClient) GetLastWrittenTimeAtomic() *atomic.Int64 {

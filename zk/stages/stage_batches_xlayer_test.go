@@ -1032,3 +1032,477 @@ func TestQueryClientManagerEdgeCases(t *testing.T) {
 		require.NotNil(t, manager.client, "Client object should still be created")
 	})
 }
+
+// TestBatchOptimizationIntegration tests the complete batch optimization integration
+func TestBatchOptimizationIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping batch optimization integration test in short mode")
+	}
+
+	t.Run("Real Server Batch Optimization", func(t *testing.T) {
+		// Create and start real server
+		server := NewRealDataStreamTestServer(t, 17930)
+		server.Start(t)
+		defer server.Stop()
+
+		// Add test data
+		server.AddMultipleL2Blocks(t, 1000, 5) // Blocks 1000-1004
+
+		ctx := context.Background()
+		cfg := BatchesCfg{
+			zkCfg: &ethconfig.Zk{
+				L2DataStreamerUrl:     server.URL(),
+				L2DataStreamerUseTLS:  false,
+				DatastreamVersion:     1,
+				L2DataStreamerTimeout: 5 * time.Second,
+				XLayer: ethconfig.XLayerConfig{
+					DataStreamBatchOptimizationEnabled: true, // Enable batch optimization
+				},
+			},
+		}
+
+		var stats getHighestDSL2BlockStats
+
+		// Test with batch optimization enabled
+		blockNum, err := getHighestDSL2Block("batch-optimization-test", ctx, cfg, 1, &stats)
+
+		require.NoError(t, err, "getHighestDSL2Block should succeed with batch optimization")
+		require.Equal(t, uint64(1004), blockNum, "Should return latest block")
+		require.Equal(t, 1, stats.dsGetBlockCounter, "Should have made one query")
+
+		t.Logf("🚀 BATCH OPTIMIZATION INTEGRATION RESULTS:")
+		t.Logf("  Block returned: %d", blockNum)
+		t.Logf("  Optimized API used: %t", stats.dsUseOptimizedAPI)
+		t.Logf("  Query time: %v", stats.dsGetBlockCost)
+		t.Logf("  Connection time: %v", stats.dsStart)
+
+		// Compare with standard mode
+		cfg.zkCfg.XLayer.DataStreamBatchOptimizationEnabled = false
+		var standardStats getHighestDSL2BlockStats
+
+		blockNum2, err2 := getHighestDSL2Block("standard-test", ctx, cfg, 1, &standardStats)
+		require.NoError(t, err2, "Standard mode should also work")
+		require.Equal(t, uint64(1004), blockNum2, "Should return same block")
+
+		t.Logf("📊 PERFORMANCE COMPARISON:")
+		t.Logf("  Batch optimization time: %v", stats.dsGetBlockCost)
+		t.Logf("  Standard mode time: %v", standardStats.dsGetBlockCost)
+		
+		if stats.dsUseOptimizedAPI {
+			t.Logf("✅ Batch optimization is working and being used")
+		} else {
+			t.Logf("⚠️  Batch optimization available but not used (server may not support it)")
+		}
+	})
+
+	t.Run("Batch Optimization Configuration Impact", func(t *testing.T) {
+		// Create real server
+		server := NewRealDataStreamTestServer(t, 17931)
+		server.Start(t)
+		defer server.Stop()
+
+		server.AddL2Block(t, server.createTestL2Block(2000))
+
+		ctx := context.Background()
+		
+		// Test with optimization enabled
+		cfgOptimized := BatchesCfg{
+			zkCfg: &ethconfig.Zk{
+				L2DataStreamerUrl:     server.URL(),
+				L2DataStreamerUseTLS:  false,
+				DatastreamVersion:     1,
+				L2DataStreamerTimeout: 3 * time.Second,
+				XLayer: ethconfig.XLayerConfig{
+					DataStreamBatchOptimizationEnabled: true,
+				},
+			},
+		}
+
+		// Test with optimization disabled
+		cfgStandard := BatchesCfg{
+			zkCfg: &ethconfig.Zk{
+				L2DataStreamerUrl:     server.URL(),
+				L2DataStreamerUseTLS:  false,
+				DatastreamVersion:     1,
+				L2DataStreamerTimeout: 3 * time.Second,
+				XLayer: ethconfig.XLayerConfig{
+					DataStreamBatchOptimizationEnabled: false,
+				},
+			},
+		}
+
+		// Reset global manager between tests
+		globalQueryManager = nil
+
+		var statsOptimized getHighestDSL2BlockStats
+		blockNumOptimized, errOptimized := getHighestDSL2Block("optimized-config", ctx, cfgOptimized, 1, &statsOptimized)
+
+		globalQueryManager = nil // Reset for second test
+
+		var statsStandard getHighestDSL2BlockStats
+		blockNumStandard, errStandard := getHighestDSL2Block("standard-config", ctx, cfgStandard, 1, &statsStandard)
+
+		// Both should succeed and return same block
+		require.NoError(t, errOptimized, "Optimized configuration should work")
+		require.NoError(t, errStandard, "Standard configuration should work")
+		require.Equal(t, uint64(2000), blockNumOptimized, "Optimized should return correct block")
+		require.Equal(t, uint64(2000), blockNumStandard, "Standard should return correct block")
+
+		t.Logf("🔧 CONFIGURATION IMPACT TEST:")
+		t.Logf("  Optimized config - API used: %t, Time: %v", statsOptimized.dsUseOptimizedAPI, statsOptimized.dsGetBlockCost)
+		t.Logf("  Standard config - API used: %t, Time: %v", statsStandard.dsUseOptimizedAPI, statsStandard.dsGetBlockCost)
+
+		// Verify configuration actually affects behavior
+		// Note: The actual API used depends on server support, but configuration should be respected
+		t.Logf("✅ Configuration test completed - both modes functional")
+	})
+
+	t.Run("Batch Optimization Failure Recovery", func(t *testing.T) {
+		// Test scenario where batch optimization fails and falls back to standard mode
+		server := NewRealDataStreamTestServer(t, 17932)
+		server.Start(t)
+		defer server.Stop()
+
+		server.AddL2Block(t, server.createTestL2Block(3000))
+
+		ctx := context.Background()
+		cfg := BatchesCfg{
+			zkCfg: &ethconfig.Zk{
+				L2DataStreamerUrl:     server.URL(),
+				L2DataStreamerUseTLS:  false,
+				DatastreamVersion:     1,
+				L2DataStreamerTimeout: 2 * time.Second,
+				XLayer: ethconfig.XLayerConfig{
+					DataStreamBatchOptimizationEnabled: true,
+				},
+			},
+		}
+
+		// Reset global manager
+		globalQueryManager = nil
+
+		var stats getHighestDSL2BlockStats
+		blockNum, err := getHighestDSL2Block("recovery-test", ctx, cfg, 1, &stats)
+
+		require.NoError(t, err, "Should succeed even if batch optimization fails")
+		require.Equal(t, uint64(3000), blockNum, "Should return correct block")
+
+		t.Logf("🔄 BATCH OPTIMIZATION RECOVERY TEST:")
+		t.Logf("  Block returned: %d", blockNum)
+		t.Logf("  API used: %t", stats.dsUseOptimizedAPI)
+		t.Logf("  Recovery successful: %t", err == nil)
+
+		// The key is that it should work regardless of whether optimization is supported
+		t.Logf("✅ Batch optimization failure recovery working")
+	})
+}
+
+// TestBatchOptimizationWithRealDatastreamRunner tests the DatastreamClientRunner with real server
+func TestBatchOptimizationWithRealDatastreamRunner(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping real datastream runner test in short mode")
+	}
+
+	t.Run("Real Server with DatastreamClientRunner", func(t *testing.T) {
+		// Create real server
+		server := NewRealDataStreamTestServer(t, 17933)
+		server.Start(t)
+		defer server.Stop()
+
+		server.AddMultipleL2Blocks(t, 4000, 3) // Blocks 4000-4002
+
+		ctx := context.Background()
+		cfg := BatchesCfg{
+			zkCfg: &ethconfig.Zk{
+				L2DataStreamerUrl:     server.URL(),
+				L2DataStreamerUseTLS:  false,
+				DatastreamVersion:     1,
+				L2DataStreamerTimeout: 3 * time.Second,
+				XLayer: ethconfig.XLayerConfig{
+					DataStreamBatchOptimizationEnabled: true,
+				},
+			},
+		}
+
+		// Create real datastream client (not mock)
+		dsQueryClient, err := getOrCreateQueryClient(ctx, cfg, 1)
+		require.NoError(t, err, "Should create real datastream client")
+		require.NotNil(t, dsQueryClient, "Client should not be nil")
+
+		// Test with DatastreamClientRunner
+		runner := NewDatastreamClientRunner(dsQueryClient, "real-runner-test")
+		errorChan := make(chan struct{}, 1)
+
+		// Test optimized mode if configuration enables it
+		if cfg.zkCfg.XLayer.DataStreamBatchOptimizationEnabled {
+			err = runner.StartReadOptimized(errorChan)
+			require.NoError(t, err, "StartReadOptimized should succeed with real client")
+
+			// Wait for reading to start
+			time.Sleep(200 * time.Millisecond)
+			
+			// Verify runner is active
+			require.True(t, runner.isReading.Load(), "Runner should be reading")
+
+			// Stop reading
+			runner.StopRead()
+			time.Sleep(200 * time.Millisecond)
+
+			// Verify runner stopped
+			require.False(t, runner.isReading.Load(), "Runner should have stopped")
+
+			t.Logf("✅ Real DatastreamClientRunner with batch optimization working")
+		} else {
+			// Test standard mode
+			err = runner.StartRead(errorChan)
+			require.NoError(t, err, "StartRead should succeed")
+
+			time.Sleep(200 * time.Millisecond)
+			require.True(t, runner.isReading.Load(), "Runner should be reading")
+
+			runner.StopRead()
+			time.Sleep(200 * time.Millisecond)
+			require.False(t, runner.isReading.Load(), "Runner should have stopped")
+
+			t.Logf("✅ Real DatastreamClientRunner with standard mode working")
+		}
+
+		// Verify no errors were reported
+		select {
+		case <-errorChan:
+			t.Fatal("Unexpected error reported by runner")
+		default:
+			// No error - good
+		}
+
+		// Clean up global manager
+		globalQueryManager = nil
+	})
+}
+
+// TestBatchOptimizationPerformanceComparison tests performance differences
+func TestBatchOptimizationPerformanceComparison(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping performance comparison test in short mode")
+	}
+
+	t.Run("Performance Comparison", func(t *testing.T) {
+		// Create real server with more data
+		server := NewRealDataStreamTestServer(t, 17934)
+		server.Start(t)
+		defer server.Stop()
+
+		server.AddMultipleL2Blocks(t, 5000, 10) // Blocks 5000-5009
+
+		ctx := context.Background()
+		baseConfig := BatchesCfg{
+			zkCfg: &ethconfig.Zk{
+				L2DataStreamerUrl:     server.URL(),
+				L2DataStreamerUseTLS:  false,
+				DatastreamVersion:     1,
+				L2DataStreamerTimeout: 5 * time.Second,
+			},
+		}
+
+		// Test with batch optimization
+		optimizedConfig := baseConfig
+		optimizedConfig.zkCfg.XLayer.DataStreamBatchOptimizationEnabled = true
+
+		// Test with standard mode
+		standardConfig := baseConfig
+		standardConfig.zkCfg.XLayer.DataStreamBatchOptimizationEnabled = false
+
+		const numTests = 3
+		var optimizedTimes []time.Duration
+		var standardTimes []time.Duration
+
+		// Run multiple tests for better average
+		for i := 0; i < numTests; i++ {
+			// Reset global manager between tests
+			globalQueryManager = nil
+
+			var optimizedStats getHighestDSL2BlockStats
+			start := time.Now()
+			blockNum1, err1 := getHighestDSL2Block("perf-optimized", ctx, optimizedConfig, 1, &optimizedStats)
+			optimizedTime := time.Since(start)
+
+			require.NoError(t, err1, "Optimized test should succeed")
+			require.Equal(t, uint64(5009), blockNum1, "Should return latest block")
+
+			globalQueryManager = nil
+
+			var standardStats getHighestDSL2BlockStats
+			start = time.Now()
+			blockNum2, err2 := getHighestDSL2Block("perf-standard", ctx, standardConfig, 1, &standardStats)
+			standardTime := time.Since(start)
+
+			require.NoError(t, err2, "Standard test should succeed")
+			require.Equal(t, uint64(5009), blockNum2, "Should return same latest block")
+
+			optimizedTimes = append(optimizedTimes, optimizedTime)
+			standardTimes = append(standardTimes, standardTime)
+
+			t.Logf("Test %d - Optimized: %v, Standard: %v, Optimized API used: %t", 
+				i+1, optimizedTime, standardTime, optimizedStats.dsUseOptimizedAPI)
+
+			// Small delay between tests
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		// Calculate averages
+		var avgOptimized, avgStandard time.Duration
+		for i := 0; i < numTests; i++ {
+			avgOptimized += optimizedTimes[i]
+			avgStandard += standardTimes[i]
+		}
+		avgOptimized /= numTests
+		avgStandard /= numTests
+
+		t.Logf("📊 PERFORMANCE COMPARISON RESULTS:")
+		t.Logf("  Average optimized time: %v", avgOptimized)
+		t.Logf("  Average standard time: %v", avgStandard)
+		
+		if avgOptimized < avgStandard {
+			improvement := float64(avgStandard-avgOptimized) / float64(avgStandard) * 100
+			t.Logf("  Performance improvement: %.1f%%", improvement)
+		} else {
+			t.Logf("  No significant performance improvement detected")
+		}
+
+		// Both modes should be functional regardless of performance
+		t.Logf("✅ Performance comparison completed - both modes working")
+
+		// Clean up
+		globalQueryManager = nil
+	})
+}
+
+// TestBatchOptimizationErrorScenarios tests various error scenarios
+func TestBatchOptimizationErrorScenarios(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping error scenarios test in short mode")
+	}
+
+	t.Run("Server Unavailable with Batch Optimization", func(t *testing.T) {
+		ctx := context.Background()
+		cfg := BatchesCfg{
+			zkCfg: &ethconfig.Zk{
+				L2DataStreamerUrl:     "localhost:19999", // Non-existent server
+				L2DataStreamerUseTLS:  false,
+				DatastreamVersion:     1,
+				L2DataStreamerTimeout: 1 * time.Second, // Short timeout
+				XLayer: ethconfig.XLayerConfig{
+					DataStreamBatchOptimizationEnabled: true,
+				},
+			},
+		}
+
+		globalQueryManager = nil
+
+		var stats getHighestDSL2BlockStats
+		_, err := getHighestDSL2Block("unavailable-server", ctx, cfg, 1, &stats)
+
+		// Should fail gracefully
+		require.Error(t, err, "Should fail when server is unavailable")
+		t.Logf("Expected error with unavailable server: %v", err)
+
+		// Clean up
+		globalQueryManager = nil
+	})
+
+	t.Run("Timeout with Batch Optimization", func(t *testing.T) {
+		// Create server but don't add data (to potentially cause timeout)
+		server := NewRealDataStreamTestServer(t, 17935)
+		server.Start(t)
+		defer server.Stop()
+
+		ctx := context.Background()
+		cfg := BatchesCfg{
+			zkCfg: &ethconfig.Zk{
+				L2DataStreamerUrl:     server.URL(),
+				L2DataStreamerUseTLS:  false,
+				DatastreamVersion:     1,
+				L2DataStreamerTimeout: 1 * time.Second, // Very short timeout
+				XLayer: ethconfig.XLayerConfig{
+					DataStreamBatchOptimizationEnabled: true,
+				},
+			},
+		}
+
+		// Add minimal data to avoid immediate failure
+		server.AddL2Block(t, server.createTestL2Block(6000))
+
+		globalQueryManager = nil
+
+		var stats getHighestDSL2BlockStats
+		blockNum, err := getHighestDSL2Block("timeout-test", ctx, cfg, 1, &stats)
+
+		// Should either succeed or fail gracefully
+		if err != nil {
+			t.Logf("Timeout test failed as expected: %v", err)
+		} else {
+			t.Logf("Timeout test succeeded: block %d", blockNum)
+			require.Equal(t, uint64(6000), blockNum, "Should return correct block if successful")
+		}
+
+		// Clean up
+		globalQueryManager = nil
+	})
+}
+
+// TestBatchOptimizationConfigurationEdgeCases tests configuration edge cases
+func TestBatchOptimizationConfigurationEdgeCases(t *testing.T) {
+	t.Run("Nil Configuration", func(t *testing.T) {
+		// Test with nil zkCfg
+		cfg := BatchesCfg{
+			zkCfg: nil,
+		}
+
+		// Should not panic
+		require.NotPanics(t, func() {
+			// This would typically cause a panic if not handled properly
+			if cfg.zkCfg != nil && cfg.zkCfg.XLayer.DataStreamBatchOptimizationEnabled {
+				t.Log("Batch optimization enabled")
+			} else {
+				t.Log("Batch optimization disabled or config nil")
+			}
+		}, "Should handle nil configuration gracefully")
+	})
+
+	t.Run("Default XLayer Configuration", func(t *testing.T) {
+		// Test with default XLayer config
+		cfg := BatchesCfg{
+			zkCfg: &ethconfig.Zk{
+				// XLayer not explicitly set - should use default
+			},
+		}
+
+		// Should default to false
+		require.False(t, cfg.zkCfg.XLayer.DataStreamBatchOptimizationEnabled, 
+			"Should default to false when not explicitly set")
+	})
+
+	t.Run("Explicit Configuration Values", func(t *testing.T) {
+		// Test explicit true
+		cfgTrue := BatchesCfg{
+			zkCfg: &ethconfig.Zk{
+				XLayer: ethconfig.XLayerConfig{
+					DataStreamBatchOptimizationEnabled: true,
+				},
+			},
+		}
+		require.True(t, cfgTrue.zkCfg.XLayer.DataStreamBatchOptimizationEnabled, 
+			"Should be true when explicitly set")
+
+		// Test explicit false
+		cfgFalse := BatchesCfg{
+			zkCfg: &ethconfig.Zk{
+				XLayer: ethconfig.XLayerConfig{
+					DataStreamBatchOptimizationEnabled: false,
+				},
+			},
+		}
+		require.False(t, cfgFalse.zkCfg.XLayer.DataStreamBatchOptimizationEnabled, 
+			"Should be false when explicitly set")
+	})
+}

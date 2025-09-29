@@ -69,7 +69,7 @@ func NewZkEVMDataStreamServerFactory() *ZkEVMDataStreamServerFactory {
 }
 
 func (f *ZkEVMDataStreamServerFactory) CreateStreamServer(port uint16, version uint8, systemID uint64, streamType datastreamer.StreamType, fileName string, writeTimeout time.Duration, inactivityTimeout time.Duration, inactivityCheckInterval time.Duration, cfg *dslog.Config) (StreamServer, error) {
-	return datastreamer.NewServer(port, version, systemID, streamType, fileName, writeTimeout, inactivityTimeout, inactivityCheckInterval, cfg)
+	return datastreamer.NewServer(port, version, systemID, streamType, fileName, writeTimeout, inactivityTimeout, inactivityCheckInterval, 10, cfg) // Default batch size 10
 }
 
 func (f *ZkEVMDataStreamServerFactory) CreateDataStreamServer(streamServer StreamServer, chainId uint64) DataStreamServer {
