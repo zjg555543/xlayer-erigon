@@ -11,6 +11,12 @@ const (
 	CmdBookmark      // CmdBookmark for the get bookmark TCP client command
 )
 
+const (
+	// Custom X Layer commands - use 1000+ range to avoid conflicts with upstream
+	CmdLatestL2Block      Command = 1001 // CmdLatestL2Block for the optimized get latest L2Block command
+	CmdStartBookmarkBatch Command = 1002 // CmdStartBookmarkBatch for the optimized batch streaming from bookmark
+)
+
 // sendHeaderCmd sends the header command to the server.
 func (c *StreamClient) sendHeaderCmd() error {
 	return c.sendCommand(CmdHeader)
@@ -59,6 +65,28 @@ func (c *StreamClient) sendEntryCmd(entryNum uint64) error {
 
 	// Send entry number
 	return c.writeToConn(entryNum)
+}
+
+// sendLatestL2BlockCmd sends the optimized get latest L2Block command to the server.
+func (c *StreamClient) sendLatestL2BlockCmd() error {
+	return c.sendCommand(CmdLatestL2Block)
+}
+
+// sendBookmarkBatchCmd sends the optimized batch streaming command for the provided bookmark value.
+// This replaces the need for separate stopStreaming + GetHeader + initiateDownloadBookmark calls
+func (c *StreamClient) sendBookmarkBatchCmd(bookmark []byte) error {
+	// Send the CmdStartBookmarkBatch command
+	if err := c.sendCommand(CmdStartBookmarkBatch); err != nil {
+		return err
+	}
+
+	// Send bookmark length
+	if err := c.writeToConn(uint32(len(bookmark))); err != nil {
+		return err
+	}
+
+	// Send the bookmark to retrieve
+	return c.writeToConn(bookmark)
 }
 
 // sendHeaderCmd sends the header command to the server.

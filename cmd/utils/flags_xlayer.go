@@ -467,6 +467,11 @@ var (
 		Usage: "Whether the sequencer is paused (true) or active (false). Can be controlled via Apollo config.",
 		Value: false,
 	}
+	DataStreamBatchOptimizationEnabled = cli.BoolFlag{
+		Name:  "zkevm.data-stream-batch-optimization-enabled",
+		Usage: "Enable data stream batch optimization",
+		Value: false,
+	}
 )
 
 func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {

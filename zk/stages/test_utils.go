@@ -2,20 +2,22 @@ package stages
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 )
 
 type TestDatastreamClient struct {
-	fullL2Blocks          []types.FullL2Block
-	gerUpdates            []types.GerUpdate
-	lastWrittenTimeAtomic atomic.Int64
-	streamingAtomic       atomic.Bool
-	stopReadingToChannel  atomic.Bool
-	progress              atomic.Uint64
-	entriesChan           chan interface{}
-	errChan               chan error
-	isStarted             bool
+	fullL2Blocks                  []types.FullL2Block
+	gerUpdates                    []types.GerUpdate
+	lastWrittenTimeAtomic         atomic.Int64
+	streamingAtomic               atomic.Bool
+	stopReadingToChannel          atomic.Bool
+	progress                      atomic.Uint64
+	entriesChan                   chan interface{}
+	errChan                       chan error
+	isStarted                     bool
+	lastUsedOptimizedHighestBlock bool
 }
 
 func NewTestDatastreamClient(fullL2Blocks []types.FullL2Block, gerUpdates []types.GerUpdate) *TestDatastreamClient {
@@ -42,10 +44,12 @@ func (c *TestDatastreamClient) ReadAllEntriesToChannel() error {
 
 	c.entriesChan <- nil // needed to stop processing
 
-	for {
+	// Wait for stop signal with timeout to avoid infinite loop
+	for i := 0; i < 1000; i++ { // Max 1 second wait
 		if c.stopReadingToChannel.Load() {
 			break
 		}
+		time.Sleep(1 * time.Millisecond)
 	}
 
 	return nil
@@ -81,6 +85,23 @@ func (c *TestDatastreamClient) GetLatestL2Block() (*types.FullL2Block, error) {
 		return nil, nil
 	}
 	return &c.fullL2Blocks[len(c.fullL2Blocks)-1], nil
+}
+
+func (c *TestDatastreamClient) LastUsedOptimizedHighestBlock() bool {
+	// Test client always returns false (uses legacy method)
+	return false
+}
+
+func (c *TestDatastreamClient) LastUsedOptimizedBatch() bool {
+	// Test client always returns false (uses legacy method)
+	return false
+}
+
+// ReadAllEntriesToChannelOptimized simulates the optimized batch streaming method
+func (c *TestDatastreamClient) ReadAllEntriesToChannelOptimized() error {
+	// For testing purposes, this behaves the same as the standard method
+	// but could be extended to simulate batch behavior
+	return c.ReadAllEntriesToChannel()
 }
 
 func (c *TestDatastreamClient) GetLastWrittenTimeAtomic() *atomic.Int64 {

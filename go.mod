@@ -12,6 +12,8 @@ require (
 
 replace github.com/ledgerwatch/erigon-lib => ./erigon-lib
 
+replace github.com/0xPolygonHermez/zkevm-data-streamer => github.com/okx/xlayer-data-streamer v0.4.1-rc2
+
 require (
 	gfx.cafe/util/go/generic v0.0.0-20230721185457-c559e86c829c
 	github.com/0xPolygonHermez/zkevm-data-streamer v0.2.9

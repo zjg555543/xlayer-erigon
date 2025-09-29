@@ -397,4 +397,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.SyncSeqLogs,
 
 	&utils.SequencerPaused,
+	&utils.DataStreamBatchOptimizationEnabled,
 }

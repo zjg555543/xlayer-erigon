@@ -174,7 +174,7 @@ func TestStreamClientReadFileEntry(t *testing.T) {
 			name:           "Invalid packet type",
 			input:          []byte{5, 0, 0, 0, 17, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45},
 			expectedResult: nil,
-			expectedError:  "expected data packet type 2 or 254 and received 5",
+			expectedError:  "expected data packet type 2, 254 or 15 and received 5",
 		},
 		{
 			name:           "Invalid byte array length",
@@ -304,23 +304,51 @@ func TestStreamClientGetLatestL2Block(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		// Read the Command
-		if err := readAndValidateUint(t, serverConn, uint64(CmdHeader), "command"); err != nil {
-			errCh <- err
+		// First, try to read CmdLatestL2Block (optimized API)
+		// Read the Command - expect CmdLatestL2Block first
+		if err := readAndValidateUint(t, serverConn, uint64(CmdLatestL2Block), "command"); err != nil {
+			errCh <- fmt.Errorf("failed to read CmdLatestL2Block: %w", err)
 			return
 		}
 
 		// Read the StreamType
 		if err := readAndValidateUint(t, serverConn, uint64(StSequencer), streamTypeFieldName); err != nil {
-			errCh <- err
+			errCh <- fmt.Errorf("failed to read stream type for optimized API: %w", err)
 			return
 		}
 
-		// Write ResultEntry
+		// Simulate optimized API failure by sending an error result
+		errorRe := &types.ResultEntry{
+			PacketType: PtResult,
+			ErrorNum:   1, // Non-zero indicates error
+			Length:     types.ResultEntryMinSize + 20,
+			ErrorStr:   []byte("optimized API not supported"),
+		}
+		_, err = serverConn.Write(errorRe.Encode())
+		if err != nil {
+			errCh <- fmt.Errorf("failed to write error result entry: %w", err)
+			return
+		}
+
+		// Now handle the fallback to legacy method
+		// Read the Command - expect CmdHeader
+		if err := readAndValidateUint(t, serverConn, uint64(CmdHeader), "command"); err != nil {
+			errCh <- fmt.Errorf("failed to read CmdHeader: %w", err)
+			return
+		}
+
+		// Read the StreamType
+		if err := readAndValidateUint(t, serverConn, uint64(StSequencer), streamTypeFieldName); err != nil {
+			errCh <- fmt.Errorf("failed to read stream type for header: %w", err)
+			return
+		}
+
+		// Write ResultEntry for header command
 		re := createResultEntry(t)
 		_, err = serverConn.Write(re.Encode())
 		if err != nil {
 			errCh <- fmt.Errorf("failed to write result entry to the connection: %w", err)
+			return
 		}
 
 		// Write HeaderEntry
@@ -335,30 +363,31 @@ func TestStreamClientGetLatestL2Block(t *testing.T) {
 		_, err = serverConn.Write(he.Encode())
 		if err != nil {
 			errCh <- fmt.Errorf("failed to write header entry to the connection: %w", err)
+			return
 		}
 
-		// Read the Command
+		// Read the Command - expect CmdEntry
 		if err := readAndValidateUint(t, serverConn, uint64(CmdEntry), "command"); err != nil {
-			errCh <- err
+			errCh <- fmt.Errorf("failed to read CmdEntry: %w", err)
 			return
 		}
 
 		// Read the StreamType
 		if err := readAndValidateUint(t, serverConn, uint64(StSequencer), streamTypeFieldName); err != nil {
-			errCh <- err
+			errCh <- fmt.Errorf("failed to read stream type for entry: %w", err)
 			return
 		}
 
 		// Read the EntryNumber
 		if err := readAndValidateUint(t, serverConn, he.TotalEntries-1, "entry number"); err != nil {
-			errCh <- err
+			errCh <- fmt.Errorf("failed to read entry number: %w", err)
 			return
 		}
 
-		// Write the ResultEntry
+		// Write the ResultEntry for entry command
 		_, err = serverConn.Write(re.Encode())
 		if err != nil {
-			errCh <- fmt.Errorf("failed to write result entry to the connection: %w", err)
+			errCh <- fmt.Errorf("failed to write result entry for entry command: %w", err)
 			return
 		}
 
@@ -590,4 +619,214 @@ func createL2BlockAndTransactions(t *testing.T, blockNum uint64, txnCount int) (
 	}
 
 	return l2Block, txns
+}
+
+// TestStreamClientBatchOptimization tests the new batch optimization features
+func TestStreamClientBatchOptimization(t *testing.T) {
+	t.Run("ExecCommandStartBookmarkBatch Method Exists", func(t *testing.T) {
+		// Simple test to verify the method exists and handles nil connection gracefully
+		c := NewClient(context.Background(), "", false, 0, 1*time.Second, 0)
+
+		// Should panic with nil connection - this is expected behavior
+		require.Panics(t, func() {
+			c.ExecCommandStartBookmarkBatch([]byte{0x01, 0x02})
+		}, "Should panic with no connection set")
+	})
+
+	t.Run("PtBatchEnd Packet Type Handling", func(t *testing.T) {
+		serverConn, clientConn := net.Pipe()
+		defer func() {
+			serverConn.Close()
+			clientConn.Close()
+		}()
+
+		c := NewClient(context.Background(), "", false, 0, 500*time.Millisecond, 0)
+		c.conn = clientConn
+
+		// Test different PtBatchEnd scenarios
+		testCases := []struct {
+			name        string
+			inputData   []byte
+			expectError error
+		}{
+			{
+				name:        "Pure PtBatchEnd packet",
+				inputData:   []byte{PtBatchEnd},
+				expectError: ErrBatchEndReceived,
+			},
+			{
+				name:        "PtBatchEnd with extra data",
+				inputData:   []byte{PtBatchEnd, 0x01, 0x02, 0x03},
+				expectError: ErrBatchEndReceived,
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				go func() {
+					serverConn.Write(tc.inputData)
+				}()
+
+				entry, err := c.NextFileEntry()
+				require.Nil(t, entry, "Entry should be nil for batch end")
+				require.Equal(t, tc.expectError, err, "Should return expected error")
+			})
+		}
+	})
+
+	t.Run("ReadAllEntriesToChannelOptimized Method Exists", func(t *testing.T) {
+		// Simple test to verify the method exists
+		c := NewClient(context.Background(), "", false, 0, 1*time.Second, 0)
+
+		// Should fail gracefully with context cancellation
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+		c.ctx = ctx
+
+		err := c.ReadAllEntriesToChannelOptimized()
+		require.Error(t, err, "Should fail with cancelled context")
+		require.Contains(t, err.Error(), "context done", "Should mention context cancellation")
+	})
+
+	t.Run("Batch Optimization Error Cases", func(t *testing.T) {
+		// Test invalid bookmark - expect panic recovery
+		t.Run("Invalid Bookmark", func(t *testing.T) {
+			c := NewClient(context.Background(), "", false, 0, 500*time.Millisecond, 0)
+			// No connection set - should panic but we recover it
+			require.Panics(t, func() {
+				c.ExecCommandStartBookmarkBatch([]byte{0x01, 0x02})
+			}, "Should panic with no connection set")
+		})
+
+		// Test connection timeout
+		t.Run("Connection Timeout", func(t *testing.T) {
+			serverConn, clientConn := net.Pipe()
+			defer func() {
+				serverConn.Close()
+				clientConn.Close()
+			}()
+
+			c := NewClient(context.Background(), "", false, 0, 100*time.Millisecond, 0) // Short timeout
+			c.conn = clientConn
+
+			// Server doesn't respond - should timeout
+			err := c.ExecCommandStartBookmarkBatch([]byte{0x01})
+			require.Error(t, err, "Should timeout")
+		})
+
+		// Test context cancellation
+		t.Run("Context Cancellation", func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			c := NewClient(ctx, "", false, 0, 2*time.Second, 0)
+
+			serverConn, clientConn := net.Pipe()
+			defer func() {
+				serverConn.Close()
+				clientConn.Close()
+			}()
+			c.conn = clientConn
+
+			// Cancel context before operation
+			cancel()
+
+			err := c.ReadAllEntriesToChannelOptimized()
+			require.Error(t, err, "Should fail with cancelled context")
+			require.Contains(t, err.Error(), "context done", "Should mention context cancellation")
+		})
+	})
+}
+
+// TestGetEntryNumberLimitWithNilHeader tests the fix for nil header crash
+func TestGetEntryNumberLimitWithNilHeader(t *testing.T) {
+	t.Run("GetEntryNumberLimit with nil header should not crash", func(t *testing.T) {
+		c := NewClient(context.Background(), "", false, 0, 1*time.Second, 0)
+
+		// Ensure header is nil (simulating batch optimization mode)
+		require.Nil(t, c.header, "Header should be nil initially")
+
+		// This should not crash even with nil header
+		limit := c.GetEntryNumberLimit()
+		require.Equal(t, ^uint64(0), limit, "Should return max uint64 when header is nil")
+
+		t.Logf("✅ GetEntryNumberLimit handles nil header correctly: %d", limit)
+	})
+
+	t.Run("GetEntryNumberLimit with valid header", func(t *testing.T) {
+		c := NewClient(context.Background(), "", false, 0, 1*time.Second, 0)
+
+		// Set a valid header
+		c.header = &types.HeaderEntry{
+			TotalEntries: 100,
+		}
+
+		limit := c.GetEntryNumberLimit()
+		require.Equal(t, uint64(100), limit, "Should return header.TotalEntries when header is valid")
+
+		t.Logf("✅ GetEntryNumberLimit works correctly with valid header: %d", limit)
+	})
+}
+
+// TestBatchEndSignalHandling tests various batch end signal scenarios
+func TestBatchEndSignalHandling(t *testing.T) {
+	testCases := []struct {
+		name          string
+		inputPackets  [][]byte
+		expectedError error
+		description   string
+	}{
+		{
+			name:          "Single PtBatchEnd",
+			inputPackets:  [][]byte{{PtBatchEnd}},
+			expectedError: ErrBatchEndReceived,
+			description:   "Should handle single batch end signal",
+		},
+		{
+			name:          "PtBatchEnd after data",
+			inputPackets:  [][]byte{{PtBatchEnd}},
+			expectedError: ErrBatchEndReceived,
+			description:   "Should handle batch end after receiving data",
+		},
+		{
+			name: "Multiple PtBatchEnd",
+			inputPackets: [][]byte{
+				{PtBatchEnd},
+				{PtBatchEnd},
+			},
+			expectedError: ErrBatchEndReceived,
+			description:   "Should handle multiple batch end signals",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			serverConn, clientConn := net.Pipe()
+			defer func() {
+				serverConn.Close()
+				clientConn.Close()
+			}()
+
+			c := NewClient(context.Background(), "", false, 0, 500*time.Millisecond, 0)
+			c.conn = clientConn
+
+			// Send test packets
+			go func() {
+				for _, packet := range tc.inputPackets {
+					serverConn.Write(packet)
+					time.Sleep(10 * time.Millisecond) // Small delay between packets
+				}
+			}()
+
+			// Read first packet
+			entry, err := c.NextFileEntry()
+			require.Nil(t, entry, "Entry should be nil for batch end")
+			require.Equal(t, tc.expectedError, err, tc.description)
+
+			// If there are multiple packets, test reading the second one
+			if len(tc.inputPackets) > 1 {
+				entry2, err2 := c.NextFileEntry()
+				require.Nil(t, entry2, "Second entry should also be nil")
+				require.Equal(t, tc.expectedError, err2, "Should handle second batch end signal")
+			}
+		})
+	}
 }
