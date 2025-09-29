@@ -78,7 +78,8 @@ type StreamClient struct {
 	tlsConfig *tls.Config
 
 	// X Layer optimization: track last used API type
-	lastUsedOptimizedAPI atomic.Bool
+	lastUsedOptimizedHighestBlock atomic.Bool // Track GetLatestL2Block API optimization
+	lastUsedOptimizedBatch        atomic.Bool // Track batch streaming optimization
 }
 
 const (
@@ -266,20 +267,25 @@ func (c *StreamClient) getLatestL2Block() (l2Block *types.FullL2Block, err error
 	// Try optimized API first (X Layer enhancement)
 	l2Block, err = c.getLatestL2BlockOptimized()
 	if err == nil {
-		c.lastUsedOptimizedAPI.Store(true)
+		c.lastUsedOptimizedHighestBlock.Store(true)
 		log.Debug("[Datastream client] getLatestL2Block using optimized API succeeded")
 		return l2Block, nil
 	}
 
 	// Optimized API failed, fall back to legacy method
-	c.lastUsedOptimizedAPI.Store(false)
+	c.lastUsedOptimizedHighestBlock.Store(false)
 	log.Debug("[Datastream client] getLatestL2Block using optimized API failed, using legacy method", "error", err)
 	return c.getLatestL2BlockLegacy()
 }
 
-// LastUsedOptimizedAPI returns whether the last GetLatestL2Block call used the optimized API
-func (c *StreamClient) LastUsedOptimizedAPI() bool {
-	return c.lastUsedOptimizedAPI.Load()
+// LastUsedOptimizedHighestBlock returns whether the last GetLatestL2Block call used the optimized API
+func (c *StreamClient) LastUsedOptimizedHighestBlock() bool {
+	return c.lastUsedOptimizedHighestBlock.Load()
+}
+
+// LastUsedOptimizedBatch returns whether the last batch streaming used the optimized API
+func (c *StreamClient) LastUsedOptimizedBatch() bool {
+	return c.lastUsedOptimizedBatch.Load()
 }
 
 // getLatestL2BlockOptimized tries to use the new CmdLatestL2Block command
@@ -656,6 +662,7 @@ LOOP:
 				// Handle batch end signal
 				if err == ErrBatchEndReceived {
 					log.Info("[Datastream client] Batch streaming completed")
+					// Send stop signal to channel like standard mode, then return success
 					return c.trySendStopSignal()
 				}
 				return err

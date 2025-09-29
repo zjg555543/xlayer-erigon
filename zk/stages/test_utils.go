@@ -8,15 +8,16 @@ import (
 )
 
 type TestDatastreamClient struct {
-	fullL2Blocks          []types.FullL2Block
-	gerUpdates            []types.GerUpdate
-	lastWrittenTimeAtomic atomic.Int64
-	streamingAtomic       atomic.Bool
-	stopReadingToChannel  atomic.Bool
-	progress              atomic.Uint64
-	entriesChan           chan interface{}
-	errChan               chan error
-	isStarted             bool
+	fullL2Blocks                  []types.FullL2Block
+	gerUpdates                    []types.GerUpdate
+	lastWrittenTimeAtomic         atomic.Int64
+	streamingAtomic               atomic.Bool
+	stopReadingToChannel          atomic.Bool
+	progress                      atomic.Uint64
+	entriesChan                   chan interface{}
+	errChan                       chan error
+	isStarted                     bool
+	lastUsedOptimizedHighestBlock bool
 }
 
 func NewTestDatastreamClient(fullL2Blocks []types.FullL2Block, gerUpdates []types.GerUpdate) *TestDatastreamClient {
@@ -86,7 +87,12 @@ func (c *TestDatastreamClient) GetLatestL2Block() (*types.FullL2Block, error) {
 	return &c.fullL2Blocks[len(c.fullL2Blocks)-1], nil
 }
 
-func (c *TestDatastreamClient) LastUsedOptimizedAPI() bool {
+func (c *TestDatastreamClient) LastUsedOptimizedHighestBlock() bool {
+	// Test client always returns false (uses legacy method)
+	return false
+}
+
+func (c *TestDatastreamClient) LastUsedOptimizedBatch() bool {
 	// Test client always returns false (uses legacy method)
 	return false
 }

@@ -119,7 +119,7 @@ func TestGetHighestDSL2BlockWithConnectionManager(t *testing.T) {
 	blockNum, err := getHighestDSL2BlockWithMockClient(ctx, cfg, mockClient, &stats)
 	require.NoError(t, err)
 	require.Equal(t, uint64(102), blockNum) // Latest block
-	require.True(t, stats.dsUseOptimizedAPI)
+	require.True(t, stats.dsUseOptimizedHighestBlock)
 	require.Equal(t, 1, stats.dsGetBlockCounter)
 
 	// Test fallback scenario
@@ -128,8 +128,8 @@ func TestGetHighestDSL2BlockWithConnectionManager(t *testing.T) {
 
 	blockNum, err = getHighestDSL2BlockWithMockClient(ctx, cfg, mockClient, &stats)
 	require.NoError(t, err)
-	require.Equal(t, uint64(102), blockNum)   // Same latest block
-	require.False(t, stats.dsUseOptimizedAPI) // Should use legacy API
+	require.Equal(t, uint64(102), blockNum)            // Same latest block
+	require.False(t, stats.dsUseOptimizedHighestBlock) // Should use legacy API
 	require.Equal(t, 1, stats.dsGetBlockCounter)
 }
 
@@ -224,14 +224,14 @@ func TestGetHighestDSL2BlockStatsIntegration(t *testing.T) {
 	require.Equal(t, uint64(3), blockNum)
 
 	// Verify stats collection
-	require.True(t, stats.dsUseOptimizedAPI)
+	require.True(t, stats.dsUseOptimizedHighestBlock)
 	require.Equal(t, 1, stats.dsGetBlockCounter)
 	require.True(t, stats.dsGetBlockCost >= 0, "Should record processing time (can be 0 for fast operations)")
 	require.True(t, stats.dsGetBlockCost <= time.Since(startTime), "Processing time should be reasonable")
 
 	// Test stats string output
 	statsStr := stats.toString()
-	require.Contains(t, statsStr, "dsUseOptimizedAPI: true")
+	require.Contains(t, statsStr, "dsUseOptimizedHighestBlock: true")
 	require.Contains(t, statsStr, "dsGetBlockCounter: 1")
 }
 
@@ -532,12 +532,12 @@ func TestGetHighestDSL2BlockWithRealServer(t *testing.T) {
 	// The critical test: verify which API was actually used
 	t.Logf("🎯 REAL SERVER RESULTS:")
 	t.Logf("  Block returned: %d", blockNum)
-	t.Logf("  Optimized API used: %t", stats.dsUseOptimizedAPI)
+	t.Logf("  Optimized API used: %t", stats.dsUseOptimizedHighestBlock)
 	t.Logf("  Connection time: %v", stats.dsStart)
 	t.Logf("  Query time: %v", stats.dsGetBlockCost)
 	t.Logf("  Full stats: %s", stats.toString())
 
-	if stats.dsUseOptimizedAPI {
+	if stats.dsUseOptimizedHighestBlock {
 		t.Logf("✅ SUCCESS: Real optimized API (CmdLatestL2Block) is working!")
 	} else {
 		t.Logf("⚠️  INFO: Using legacy API (optimized API may not be supported by this server version)")
@@ -1072,7 +1072,7 @@ func TestBatchOptimizationIntegration(t *testing.T) {
 
 		t.Logf("🚀 BATCH OPTIMIZATION INTEGRATION RESULTS:")
 		t.Logf("  Block returned: %d", blockNum)
-		t.Logf("  Optimized API used: %t", stats.dsUseOptimizedAPI)
+		t.Logf("  Optimized API used: %t", stats.dsUseOptimizedHighestBlock)
 		t.Logf("  Query time: %v", stats.dsGetBlockCost)
 		t.Logf("  Connection time: %v", stats.dsStart)
 
@@ -1087,8 +1087,8 @@ func TestBatchOptimizationIntegration(t *testing.T) {
 		t.Logf("📊 PERFORMANCE COMPARISON:")
 		t.Logf("  Batch optimization time: %v", stats.dsGetBlockCost)
 		t.Logf("  Standard mode time: %v", standardStats.dsGetBlockCost)
-		
-		if stats.dsUseOptimizedAPI {
+
+		if stats.dsUseOptimizedHighestBlock {
 			t.Logf("✅ Batch optimization is working and being used")
 		} else {
 			t.Logf("⚠️  Batch optimization available but not used (server may not support it)")
@@ -1104,7 +1104,7 @@ func TestBatchOptimizationIntegration(t *testing.T) {
 		server.AddL2Block(t, server.createTestL2Block(2000))
 
 		ctx := context.Background()
-		
+
 		// Test with optimization enabled
 		cfgOptimized := BatchesCfg{
 			zkCfg: &ethconfig.Zk{
@@ -1149,8 +1149,8 @@ func TestBatchOptimizationIntegration(t *testing.T) {
 		require.Equal(t, uint64(2000), blockNumStandard, "Standard should return correct block")
 
 		t.Logf("🔧 CONFIGURATION IMPACT TEST:")
-		t.Logf("  Optimized config - API used: %t, Time: %v", statsOptimized.dsUseOptimizedAPI, statsOptimized.dsGetBlockCost)
-		t.Logf("  Standard config - API used: %t, Time: %v", statsStandard.dsUseOptimizedAPI, statsStandard.dsGetBlockCost)
+		t.Logf("  Optimized config - API used: %t, Time: %v", statsOptimized.dsUseOptimizedHighestBlock, statsOptimized.dsGetBlockCost)
+		t.Logf("  Standard config - API used: %t, Time: %v", statsStandard.dsUseOptimizedHighestBlock, statsStandard.dsGetBlockCost)
 
 		// Verify configuration actually affects behavior
 		// Note: The actual API used depends on server support, but configuration should be respected
@@ -1189,7 +1189,7 @@ func TestBatchOptimizationIntegration(t *testing.T) {
 
 		t.Logf("🔄 BATCH OPTIMIZATION RECOVERY TEST:")
 		t.Logf("  Block returned: %d", blockNum)
-		t.Logf("  API used: %t", stats.dsUseOptimizedAPI)
+		t.Logf("  API used: %t", stats.dsUseOptimizedHighestBlock)
 		t.Logf("  Recovery successful: %t", err == nil)
 
 		// The key is that it should work regardless of whether optimization is supported
@@ -1240,7 +1240,7 @@ func TestBatchOptimizationWithRealDatastreamRunner(t *testing.T) {
 
 			// Wait for reading to start
 			time.Sleep(200 * time.Millisecond)
-			
+
 			// Verify runner is active
 			require.True(t, runner.isReading.Load(), "Runner should be reading")
 
@@ -1342,8 +1342,8 @@ func TestBatchOptimizationPerformanceComparison(t *testing.T) {
 			optimizedTimes = append(optimizedTimes, optimizedTime)
 			standardTimes = append(standardTimes, standardTime)
 
-			t.Logf("Test %d - Optimized: %v, Standard: %v, Optimized API used: %t", 
-				i+1, optimizedTime, standardTime, optimizedStats.dsUseOptimizedAPI)
+			t.Logf("Test %d - Optimized: %v, Standard: %v, Optimized API used: %t",
+				i+1, optimizedTime, standardTime, optimizedStats.dsUseOptimizedHighestBlock)
 
 			// Small delay between tests
 			time.Sleep(100 * time.Millisecond)
@@ -1361,7 +1361,7 @@ func TestBatchOptimizationPerformanceComparison(t *testing.T) {
 		t.Logf("📊 PERFORMANCE COMPARISON RESULTS:")
 		t.Logf("  Average optimized time: %v", avgOptimized)
 		t.Logf("  Average standard time: %v", avgStandard)
-		
+
 		if avgOptimized < avgStandard {
 			improvement := float64(avgStandard-avgOptimized) / float64(avgStandard) * 100
 			t.Logf("  Performance improvement: %.1f%%", improvement)
@@ -1478,7 +1478,7 @@ func TestBatchOptimizationConfigurationEdgeCases(t *testing.T) {
 		}
 
 		// Should default to false
-		require.False(t, cfg.zkCfg.XLayer.DataStreamBatchOptimizationEnabled, 
+		require.False(t, cfg.zkCfg.XLayer.DataStreamBatchOptimizationEnabled,
 			"Should default to false when not explicitly set")
 	})
 
@@ -1491,7 +1491,7 @@ func TestBatchOptimizationConfigurationEdgeCases(t *testing.T) {
 				},
 			},
 		}
-		require.True(t, cfgTrue.zkCfg.XLayer.DataStreamBatchOptimizationEnabled, 
+		require.True(t, cfgTrue.zkCfg.XLayer.DataStreamBatchOptimizationEnabled,
 			"Should be true when explicitly set")
 
 		// Test explicit false
@@ -1502,7 +1502,7 @@ func TestBatchOptimizationConfigurationEdgeCases(t *testing.T) {
 				},
 			},
 		}
-		require.False(t, cfgFalse.zkCfg.XLayer.DataStreamBatchOptimizationEnabled, 
+		require.False(t, cfgFalse.zkCfg.XLayer.DataStreamBatchOptimizationEnabled,
 			"Should be false when explicitly set")
 	})
 }

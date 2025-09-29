@@ -67,7 +67,8 @@ type DatastreamClient interface {
 	GetEntryChan() *chan interface{}
 	GetL2BlockByNumber(blockNum uint64) (*types.FullL2Block, error)
 	GetLatestL2Block() (*types.FullL2Block, error)
-	LastUsedOptimizedAPI() bool
+	LastUsedOptimizedHighestBlock() bool // X Layer: track GetLatestL2Block API optimization
+	LastUsedOptimizedBatch() bool        // X Layer: track batch streaming optimization
 	GetProgressAtomic() *atomic.Uint64
 	Start() error
 	Stop() error
@@ -297,10 +298,10 @@ func SpawnStageBatches(
 
 	// Use optimized batch streaming if enabled (reduces TCP calls from 4 to 1)
 	if cfg.zkCfg.XLayer.DataStreamBatchOptimizationEnabled {
-		log.Info(fmt.Sprintf("[%s] Using optimized batch streaming", logPrefix))
+		stats.dsUseOptimizedBatch = true
 		dsClientRunner.StartReadOptimized(errorChan)
 	} else {
-		log.Info(fmt.Sprintf("[%s] Using standard streaming", logPrefix))
+		stats.dsUseOptimizedBatch = false
 		dsClientRunner.StartRead(errorChan)
 	}
 	defer dsClientRunner.StopRead()
@@ -864,18 +865,19 @@ func newStreamClient(ctx context.Context, cfg BatchesCfg, latestForkId uint64) (
 }
 
 type getHighestDSL2BlockStats struct {
-	dsStart           time.Duration
-	dsStartCounter    int
-	dsGetBlockCost    time.Duration
-	dsGetBlockCounter int
-	dsStopCost        time.Duration
-	dsStopCounter     int
-	dsUseOptimizedAPI bool
+	dsStart                    time.Duration
+	dsStartCounter             int
+	dsGetBlockCost             time.Duration
+	dsGetBlockCounter          int
+	dsStopCost                 time.Duration
+	dsStopCounter              int
+	dsUseOptimizedHighestBlock bool
+	dsUseOptimizedBatch        bool
 }
 
 func (stats getHighestDSL2BlockStats) toString() string {
-	return fmt.Sprintf("getHighestDSL2BlockStats {dsStart: %v, dsStartCounter: %d, dsGetBlockCost: %v, dsGetBlockCounter: %d, dsStopCost: %v, dsStopCounter: %d, dsUseOptimizedAPI: %t}",
-		stats.dsStart, stats.dsStartCounter, stats.dsGetBlockCost, stats.dsGetBlockCounter, stats.dsStopCost, stats.dsStopCounter, stats.dsUseOptimizedAPI)
+	return fmt.Sprintf("getHighestDSL2BlockStats {dsStart: %v, dsStartCounter: %d, dsGetBlockCost: %v, dsGetBlockCounter: %d, dsStopCost: %v, dsStopCounter: %d, dsUseOptimizedHighestBlock: %t, dsUseOptimizedBatch: %t}",
+		stats.dsStart, stats.dsStartCounter, stats.dsGetBlockCost, stats.dsGetBlockCounter, stats.dsStopCost, stats.dsStopCounter, stats.dsUseOptimizedHighestBlock, stats.dsUseOptimizedBatch)
 }
 
 func getHighestDSL2Block(logPrefix string, ctx context.Context, batchCfg BatchesCfg, latestFork uint16, stats *getHighestDSL2BlockStats) (uint64, error) {
@@ -893,7 +895,7 @@ func getHighestDSL2Block(logPrefix string, ctx context.Context, batchCfg Batches
 	fullBlock, err := dsClient.GetLatestL2Block()
 	stats.dsGetBlockCost += time.Since(dsGetlockStart)
 	stats.dsGetBlockCounter += 1
-	stats.dsUseOptimizedAPI = dsClient.LastUsedOptimizedAPI()
+	stats.dsUseOptimizedHighestBlock = dsClient.LastUsedOptimizedHighestBlock()
 	if err != nil {
 		return 0, err
 	}

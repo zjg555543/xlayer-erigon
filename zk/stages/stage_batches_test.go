@@ -309,9 +309,9 @@ func TestGetHighestDSL2BlockWithOptimizedAPI(t *testing.T) {
 	// ASSERT
 	require.NoError(t, err)
 	require.Equal(t, uint64(5), blockNum) // Latest block number
-	require.True(t, stats.dsUseOptimizedAPI, "Should use optimized API")
+	require.True(t, stats.dsUseOptimizedHighestBlock, "Should use optimized API")
 	require.Equal(t, 1, stats.dsGetBlockCounter)
-	require.True(t, mockClient.LastUsedOptimizedAPI(), "LastUsedOptimizedAPI should return true")
+	require.True(t, mockClient.LastUsedOptimizedHighestBlock(), "LastUsedOptimizedHighestBlock should return true")
 }
 
 // TestGetHighestDSL2BlockWithFallback tests the fallback to legacy method
@@ -342,9 +342,9 @@ func TestGetHighestDSL2BlockWithFallback(t *testing.T) {
 	// ASSERT
 	require.NoError(t, err)
 	require.Equal(t, uint64(3), blockNum) // Latest block number
-	require.False(t, stats.dsUseOptimizedAPI, "Should use legacy API")
+	require.False(t, stats.dsUseOptimizedHighestBlock, "Should use legacy API")
 	require.Equal(t, 1, stats.dsGetBlockCounter)
-	require.False(t, mockClient.LastUsedOptimizedAPI(), "LastUsedOptimizedAPI should return false")
+	require.False(t, mockClient.LastUsedOptimizedHighestBlock(), "LastUsedOptimizedHighestBlock should return false")
 }
 
 // TestLastUsedOptimizedAPITracking tests API type tracking
@@ -359,30 +359,30 @@ func TestLastUsedOptimizedAPITracking(t *testing.T) {
 	}
 
 	// Initially should be false (default)
-	require.False(t, mockClient.LastUsedOptimizedAPI())
+	require.False(t, mockClient.LastUsedOptimizedHighestBlock())
 
 	// Call GetLatestL2Block with optimized API
 	_, err := mockClient.GetLatestL2Block()
 	require.NoError(t, err)
-	require.True(t, mockClient.LastUsedOptimizedAPI())
+	require.True(t, mockClient.LastUsedOptimizedHighestBlock())
 
 	// Test fallback tracking
 	mockClient.useOptimizedAPI = false
 	_, err = mockClient.GetLatestL2Block()
 	require.NoError(t, err)
-	require.False(t, mockClient.LastUsedOptimizedAPI())
+	require.False(t, mockClient.LastUsedOptimizedHighestBlock())
 }
 
 // TestStatsToStringWithAPIType tests the stats output format
 func TestStatsToStringWithAPIType(t *testing.T) {
 	stats := getHighestDSL2BlockStats{
-		dsStart:           100 * time.Microsecond,
-		dsStartCounter:    1,
-		dsGetBlockCost:    50 * time.Millisecond,
-		dsGetBlockCounter: 1,
-		dsStopCost:        10 * time.Microsecond,
-		dsStopCounter:     0,
-		dsUseOptimizedAPI: true,
+		dsStart:                    100 * time.Microsecond,
+		dsStartCounter:             1,
+		dsGetBlockCost:             50 * time.Millisecond,
+		dsGetBlockCounter:          1,
+		dsStopCost:                 10 * time.Microsecond,
+		dsStopCounter:              0,
+		dsUseOptimizedHighestBlock: true,
 	}
 
 	result := stats.toString()
@@ -394,12 +394,12 @@ func TestStatsToStringWithAPIType(t *testing.T) {
 	require.Contains(t, result, "dsGetBlockCounter: 1")
 	require.Contains(t, result, "dsStopCost: 10µs")
 	require.Contains(t, result, "dsStopCounter: 0")
-	require.Contains(t, result, "dsUseOptimizedAPI: true")
+	require.Contains(t, result, "dsUseOptimizedHighestBlock: true")
 
 	// Test with legacy API
-	stats.dsUseOptimizedAPI = false
+	stats.dsUseOptimizedHighestBlock = false
 	result = stats.toString()
-	require.Contains(t, result, "dsUseOptimizedAPI: false")
+	require.Contains(t, result, "dsUseOptimizedHighestBlock: false")
 }
 
 // MockOptimizedDatastreamClient extends TestDatastreamClient to support optimized API testing
@@ -425,6 +425,14 @@ func (m *MockOptimizedDatastreamClient) LastUsedOptimizedAPI() bool {
 	return m.lastUsedOptimizedAPI
 }
 
+func (m *MockOptimizedDatastreamClient) LastUsedOptimizedHighestBlock() bool {
+	return m.lastUsedOptimizedAPI // For this mock, both track the same optimization
+}
+
+func (m *MockOptimizedDatastreamClient) LastUsedOptimizedBatch() bool {
+	return false // MockOptimizedDatastreamClient doesn't support batch optimization
+}
+
 // Helper function to test getHighestDSL2Block with mock client
 func getHighestDSL2BlockWithMockClient(ctx context.Context, cfg BatchesCfg, mockClient DatastreamClient, stats *getHighestDSL2BlockStats) (uint64, error) {
 	// Simulate the core logic of getHighestDSL2Block without connection management
@@ -432,7 +440,7 @@ func getHighestDSL2BlockWithMockClient(ctx context.Context, cfg BatchesCfg, mock
 	fullBlock, err := mockClient.GetLatestL2Block()
 	stats.dsGetBlockCost += time.Since(dsGetlockStart)
 	stats.dsGetBlockCounter += 1
-	stats.dsUseOptimizedAPI = mockClient.LastUsedOptimizedAPI()
+	stats.dsUseOptimizedHighestBlock = mockClient.LastUsedOptimizedHighestBlock()
 
 	if err != nil {
 		return 0, err
@@ -657,15 +665,15 @@ func TestBatchOptimizationAPITracking(t *testing.T) {
 		}
 
 		// Initially should not be using optimized API
-		require.False(t, mockClient.LastUsedOptimizedAPI(), "Should initially not use optimized API")
+		require.False(t, mockClient.LastUsedOptimizedHighestBlock(), "Should initially not use optimized API")
 
 		// Just test the API tracking without calling the methods that might loop
 		// Simulate API call tracking directly
-		mockClient.lastUsedOptimized = true
-		require.True(t, mockClient.LastUsedOptimizedAPI(), "Should track optimized API usage")
+		mockClient.lastUsedOptimizedHighestBlock = true
+		require.True(t, mockClient.LastUsedOptimizedHighestBlock(), "Should track optimized API usage")
 
-		mockClient.lastUsedOptimized = false
-		require.False(t, mockClient.LastUsedOptimizedAPI(), "Should track standard API usage")
+		mockClient.lastUsedOptimizedHighestBlock = false
+		require.False(t, mockClient.LastUsedOptimizedBatch(), "Should track standard API usage")
 	})
 
 	t.Run("API Tracking in getHighestDSL2Block", func(t *testing.T) {
@@ -690,20 +698,20 @@ func TestBatchOptimizationAPITracking(t *testing.T) {
 
 		require.NoError(t, err, "Should succeed with optimized API")
 		require.Equal(t, uint64(3), blockNum, "Should return latest block")
-		require.True(t, stats.dsUseOptimizedAPI, "Stats should reflect optimized API usage")
-		require.True(t, mockClient.LastUsedOptimizedAPI(), "Mock should track optimized API usage")
+		require.True(t, stats.dsUseOptimizedHighestBlock, "Stats should reflect optimized API usage")
+		require.True(t, mockClient.LastUsedOptimizedHighestBlock(), "Mock should track optimized API usage")
 
 		// Test with optimized API disabled
 		mockClient.optimizedEnabled = false
-		mockClient.lastUsedOptimized = false // Reset tracking
+		mockClient.lastUsedOptimizedHighestBlock = false // Reset tracking
 
 		var stats2 getHighestDSL2BlockStats
 		blockNum2, err2 := getHighestDSL2BlockWithMockClient(ctx, cfg, mockClient, &stats2)
 
 		require.NoError(t, err2, "Should succeed with standard API")
 		require.Equal(t, uint64(3), blockNum2, "Should return same latest block")
-		require.False(t, stats2.dsUseOptimizedAPI, "Stats should reflect standard API usage")
-		require.False(t, mockClient.LastUsedOptimizedAPI(), "Mock should track standard API usage")
+		require.False(t, stats2.dsUseOptimizedHighestBlock, "Stats should reflect standard API usage")
+		require.False(t, mockClient.LastUsedOptimizedHighestBlock(), "Mock should track standard API usage")
 	})
 }
 
@@ -768,16 +776,16 @@ func TestBatchOptimizationErrorHandling(t *testing.T) {
 // MockOptimizedDatastreamClientWithBatch extends MockOptimizedDatastreamClient with batch support
 type MockOptimizedDatastreamClientWithBatch struct {
 	TestDatastreamClient
-	optimizedEnabled     bool
-	optimizedCalled      bool
-	lastUsedOptimized    bool
-	shouldErrorOptimized bool
-	ctx                  context.Context
+	optimizedEnabled              bool
+	optimizedCalled               bool
+	lastUsedOptimizedHighestBlock bool
+	shouldErrorOptimized          bool
+	ctx                           context.Context
 }
 
 func (m *MockOptimizedDatastreamClientWithBatch) ReadAllEntriesToChannelOptimized() error {
 	m.optimizedCalled = true
-	m.lastUsedOptimized = true
+	m.lastUsedOptimizedHighestBlock = true
 
 	if m.shouldErrorOptimized {
 		return fmt.Errorf("simulated optimized method error")
@@ -796,21 +804,29 @@ func (m *MockOptimizedDatastreamClientWithBatch) ReadAllEntriesToChannelOptimize
 }
 
 func (m *MockOptimizedDatastreamClientWithBatch) ReadAllEntriesToChannel() error {
-	m.lastUsedOptimized = false
+	m.lastUsedOptimizedHighestBlock = false
 	return m.TestDatastreamClient.ReadAllEntriesToChannel()
 }
 
 func (m *MockOptimizedDatastreamClientWithBatch) GetLatestL2Block() (*types.FullL2Block, error) {
 	if m.optimizedEnabled {
-		m.lastUsedOptimized = true
+		m.lastUsedOptimizedHighestBlock = true
 	} else {
-		m.lastUsedOptimized = false
+		m.lastUsedOptimizedHighestBlock = false
 	}
 	return m.TestDatastreamClient.GetLatestL2Block()
 }
 
+func (m *MockOptimizedDatastreamClientWithBatch) LastUsedOptimizedHighestBlock() bool {
+	return m.lastUsedOptimizedHighestBlock
+}
+
 func (m *MockOptimizedDatastreamClientWithBatch) LastUsedOptimizedAPI() bool {
-	return m.lastUsedOptimized
+	return m.lastUsedOptimizedHighestBlock
+}
+
+func (m *MockOptimizedDatastreamClientWithBatch) LastUsedOptimizedBatch() bool {
+	return m.lastUsedOptimizedHighestBlock // For this mock, batch optimization tracks same as HighestBlock
 }
 
 // MockErrorDatastreamClient simulates error conditions
