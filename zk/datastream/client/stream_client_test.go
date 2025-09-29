@@ -736,6 +736,36 @@ func TestStreamClientBatchOptimization(t *testing.T) {
 	})
 }
 
+// TestGetEntryNumberLimitWithNilHeader tests the fix for nil header crash
+func TestGetEntryNumberLimitWithNilHeader(t *testing.T) {
+	t.Run("GetEntryNumberLimit with nil header should not crash", func(t *testing.T) {
+		c := NewClient(context.Background(), "", false, 0, 1*time.Second, 0)
+
+		// Ensure header is nil (simulating batch optimization mode)
+		require.Nil(t, c.header, "Header should be nil initially")
+
+		// This should not crash even with nil header
+		limit := c.GetEntryNumberLimit()
+		require.Equal(t, ^uint64(0), limit, "Should return max uint64 when header is nil")
+
+		t.Logf("✅ GetEntryNumberLimit handles nil header correctly: %d", limit)
+	})
+
+	t.Run("GetEntryNumberLimit with valid header", func(t *testing.T) {
+		c := NewClient(context.Background(), "", false, 0, 1*time.Second, 0)
+
+		// Set a valid header
+		c.header = &types.HeaderEntry{
+			TotalEntries: 100,
+		}
+
+		limit := c.GetEntryNumberLimit()
+		require.Equal(t, uint64(100), limit, "Should return header.TotalEntries when header is valid")
+
+		t.Logf("✅ GetEntryNumberLimit works correctly with valid header: %d", limit)
+	})
+}
+
 // TestBatchEndSignalHandling tests various batch end signal scenarios
 func TestBatchEndSignalHandling(t *testing.T) {
 	testCases := []struct {

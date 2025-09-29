@@ -131,6 +131,11 @@ func (c *StreamClient) GetEntryChan() *chan interface{} {
 }
 
 func (c *StreamClient) GetEntryNumberLimit() uint64 {
+	if c.header == nil {
+		// In batch mode, we don't have header.TotalEntries
+		// Return a large number to avoid entry limit checks
+		return ^uint64(0) // Max uint64
+	}
 	return c.header.TotalEntries
 }
 
@@ -552,8 +557,6 @@ func (c *StreamClient) ReadAllEntriesToChannelOptimized() (err error) {
 	default:
 	}
 
-	log.Info("[Datastream client] Using optimized batch mode")
-
 	if err = c.readAllEntriesToChannelOptimized(); err != nil {
 		return err
 	}
@@ -632,8 +635,6 @@ func (c *StreamClient) readAllEntriesToChannelOptimized() (err error) {
 // readAllFullL2BlocksToChannelOptimized reads all entries using batch streaming
 // This method handles PtBatchEnd signals and optimized batch reception
 func (c *StreamClient) readAllFullL2BlocksToChannelOptimized() (err error) {
-	log.Info("[Datastream client] reading full L2 blocks to channel (optimized batch mode)")
-
 	readNewProto := true
 	parsedProto := interface{}(nil)
 LOOP:
@@ -659,9 +660,10 @@ LOOP:
 				if err == ErrReachedEntryNumberLimit {
 					return c.trySendStopSignal()
 				}
-				// Handle batch end signal
-				if err == ErrBatchEndReceived {
-					log.Info("[Datastream client] Batch streaming completed")
+				// Handle batch end signal (use errors.Is to handle wrapped errors)
+				if errors.Is(err, ErrBatchEndReceived) {
+					// Reset streaming state before sending stop signal
+					c.setStreaming(false)
 					// Send stop signal to channel like standard mode, then return success
 					return c.trySendStopSignal()
 				}
