@@ -296,7 +296,8 @@ func SpawnStageBatches(
 	errorChan := make(chan struct{})
 	dsClientRunner := NewDatastreamClientRunner(dsQueryClient, logPrefix)
 
-	// Use optimized batch streaming if enabled (reduces TCP calls from 4 to 1)
+	// Use optimized batch streaming if enabled
+	dsReadAllEntriesCostStart := time.Now()
 	if cfg.zkCfg.XLayer.DataStreamBatchOptimizationEnabled {
 		stats.dsUseOptimizedBatch = true
 		dsClientRunner.StartReadOptimized(errorChan)
@@ -382,19 +383,21 @@ func SpawnStageBatches(
 		}
 
 	}
+	stats.dsReadAllEntriesCost = time.Since(dsReadAllEntriesCostStart)
 
 	// no new progress, nothing to save
 	if batchProcessor.LastBlockHeight() == stageProgressBlockNo {
 		return nil
 	}
 
+	dsSaveStageProgressCostStart := time.Now()
 	if err = saveStageProgress(tx, logPrefix, batchProcessor.HighestHashableL2BlockNo(), batchProcessor.HighestSeenBatchNumber(), batchProcessor.LastBlockHeight(), batchProcessor.LastForkId()); err != nil {
 		return fmt.Errorf("saveStageProgress: %w", err)
 	}
 	if err := hermezDb.WriteBlockL1InfoTreeIndexProgress(batchProcessor.LastBlockHeight(), highestL1InfoTreeIndex); err != nil {
 		return fmt.Errorf("WriteBlockL1InfoTreeIndexProgress: %w", err)
 	}
-
+	stats.dsSaveStageProgressCost = time.Since(dsSaveStageProgressCostStart)
 	// stop printing blocks written progress routine
 	elapsed := time.Since(startSyncTime)
 	log.Info(fmt.Sprintf("[%s] Finished writing blocks", logPrefix), "blocksWritten", batchProcessor.TotalBlocksWritten(), "elapsed", elapsed, "getHighestDSL2BlockCounter", getHighestDSL2BlockCounter, "getHighestDSL2BlockCost", getHighestDSL2BlockCost, "getHighestDSL2BlockStats", stats.toString(), "getBatchNoByL2BlockCost", getBatchNoByL2BlockCost, "getForkIdCost", getForkIdCost)
@@ -867,17 +870,17 @@ func newStreamClient(ctx context.Context, cfg BatchesCfg, latestForkId uint64) (
 type getHighestDSL2BlockStats struct {
 	dsStart                    time.Duration
 	dsStartCounter             int
-	dsGetBlockCost             time.Duration
-	dsGetBlockCounter          int
-	dsStopCost                 time.Duration
-	dsStopCounter              int
+	dsGetHighestBlockCost      time.Duration
+	dsGetHighestBlockCounter   int
+	dsReadAllEntriesCost       time.Duration
+	dsSaveStageProgressCost    time.Duration
 	dsUseOptimizedHighestBlock bool
 	dsUseOptimizedBatch        bool
 }
 
 func (stats getHighestDSL2BlockStats) toString() string {
-	return fmt.Sprintf("getHighestDSL2BlockStats {dsStart: %v, dsStartCounter: %d, dsGetBlockCost: %v, dsGetBlockCounter: %d, dsStopCost: %v, dsStopCounter: %d, dsUseOptimizedHighestBlock: %t, dsUseOptimizedBatch: %t}",
-		stats.dsStart, stats.dsStartCounter, stats.dsGetBlockCost, stats.dsGetBlockCounter, stats.dsStopCost, stats.dsStopCounter, stats.dsUseOptimizedHighestBlock, stats.dsUseOptimizedBatch)
+	return fmt.Sprintf("getHighestDSL2BlockStats {dsStart: %v, dsStartCounter: %d, dsGetHighestBlockCost: %v, dsGetHighestBlockCounter: %d, dsReadAllEntriesCost: %v, dsSaveStageProgressCost: %v, dsUseOptimizedHighestBlock: %t, dsUseOptimizedBatch: %t}",
+		stats.dsStart, stats.dsStartCounter, stats.dsGetHighestBlockCost, stats.dsGetHighestBlockCounter, stats.dsReadAllEntriesCost, stats.dsSaveStageProgressCost, stats.dsUseOptimizedHighestBlock, stats.dsUseOptimizedBatch)
 }
 
 func getHighestDSL2Block(logPrefix string, ctx context.Context, batchCfg BatchesCfg, latestFork uint16, stats *getHighestDSL2BlockStats) (uint64, error) {
@@ -893,8 +896,8 @@ func getHighestDSL2Block(logPrefix string, ctx context.Context, batchCfg Batches
 	// Query latest L2Block using reused connection
 	dsGetlockStart := time.Now()
 	fullBlock, err := dsClient.GetLatestL2Block()
-	stats.dsGetBlockCost += time.Since(dsGetlockStart)
-	stats.dsGetBlockCounter += 1
+	stats.dsGetHighestBlockCost += time.Since(dsGetlockStart)
+	stats.dsGetHighestBlockCounter += 1
 	stats.dsUseOptimizedHighestBlock = dsClient.LastUsedOptimizedHighestBlock()
 	if err != nil {
 		return 0, err

@@ -310,7 +310,7 @@ func TestGetHighestDSL2BlockWithOptimizedAPI(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(5), blockNum) // Latest block number
 	require.True(t, stats.dsUseOptimizedHighestBlock, "Should use optimized API")
-	require.Equal(t, 1, stats.dsGetBlockCounter)
+	require.Equal(t, 1, stats.dsGetHighestBlockCounter)
 	require.True(t, mockClient.LastUsedOptimizedHighestBlock(), "LastUsedOptimizedHighestBlock should return true")
 }
 
@@ -343,7 +343,7 @@ func TestGetHighestDSL2BlockWithFallback(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(3), blockNum) // Latest block number
 	require.False(t, stats.dsUseOptimizedHighestBlock, "Should use legacy API")
-	require.Equal(t, 1, stats.dsGetBlockCounter)
+	require.Equal(t, 1, stats.dsGetHighestBlockCounter)
 	require.False(t, mockClient.LastUsedOptimizedHighestBlock(), "LastUsedOptimizedHighestBlock should return false")
 }
 
@@ -378,10 +378,8 @@ func TestStatsToStringWithAPIType(t *testing.T) {
 	stats := getHighestDSL2BlockStats{
 		dsStart:                    100 * time.Microsecond,
 		dsStartCounter:             1,
-		dsGetBlockCost:             50 * time.Millisecond,
-		dsGetBlockCounter:          1,
-		dsStopCost:                 10 * time.Microsecond,
-		dsStopCounter:              0,
+		dsGetHighestBlockCost:      50 * time.Millisecond,
+		dsGetHighestBlockCounter:   1,
 		dsUseOptimizedHighestBlock: true,
 	}
 
@@ -390,10 +388,8 @@ func TestStatsToStringWithAPIType(t *testing.T) {
 	// Verify the output contains all expected fields
 	require.Contains(t, result, "dsStart: 100µs")
 	require.Contains(t, result, "dsStartCounter: 1")
-	require.Contains(t, result, "dsGetBlockCost: 50ms")
-	require.Contains(t, result, "dsGetBlockCounter: 1")
-	require.Contains(t, result, "dsStopCost: 10µs")
-	require.Contains(t, result, "dsStopCounter: 0")
+	require.Contains(t, result, "dsGetHighestBlockCost: 50ms")
+	require.Contains(t, result, "dsGetHighestBlockCounter: 1")
 	require.Contains(t, result, "dsUseOptimizedHighestBlock: true")
 
 	// Test with legacy API
@@ -438,8 +434,8 @@ func getHighestDSL2BlockWithMockClient(ctx context.Context, cfg BatchesCfg, mock
 	// Simulate the core logic of getHighestDSL2Block without connection management
 	dsGetlockStart := time.Now()
 	fullBlock, err := mockClient.GetLatestL2Block()
-	stats.dsGetBlockCost += time.Since(dsGetlockStart)
-	stats.dsGetBlockCounter += 1
+	stats.dsGetHighestBlockCost += time.Since(dsGetlockStart)
+	stats.dsGetHighestBlockCounter += 1
 	stats.dsUseOptimizedHighestBlock = mockClient.LastUsedOptimizedHighestBlock()
 
 	if err != nil {

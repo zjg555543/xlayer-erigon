@@ -120,7 +120,7 @@ func TestGetHighestDSL2BlockWithConnectionManager(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(102), blockNum) // Latest block
 	require.True(t, stats.dsUseOptimizedHighestBlock)
-	require.Equal(t, 1, stats.dsGetBlockCounter)
+	require.Equal(t, 1, stats.dsGetHighestBlockCounter)
 
 	// Test fallback scenario
 	mockClient.useOptimizedAPI = false
@@ -130,7 +130,7 @@ func TestGetHighestDSL2BlockWithConnectionManager(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(102), blockNum)            // Same latest block
 	require.False(t, stats.dsUseOptimizedHighestBlock) // Should use legacy API
-	require.Equal(t, 1, stats.dsGetBlockCounter)
+	require.Equal(t, 1, stats.dsGetHighestBlockCounter)
 }
 
 // TestQueryClientManagerConcurrentAccess tests concurrent access safety
@@ -225,14 +225,14 @@ func TestGetHighestDSL2BlockStatsIntegration(t *testing.T) {
 
 	// Verify stats collection
 	require.True(t, stats.dsUseOptimizedHighestBlock)
-	require.Equal(t, 1, stats.dsGetBlockCounter)
-	require.True(t, stats.dsGetBlockCost >= 0, "Should record processing time (can be 0 for fast operations)")
-	require.True(t, stats.dsGetBlockCost <= time.Since(startTime), "Processing time should be reasonable")
+	require.Equal(t, 1, stats.dsGetHighestBlockCounter)
+	require.True(t, stats.dsGetHighestBlockCost >= 0, "Should record processing time (can be 0 for fast operations)")
+	require.True(t, stats.dsGetHighestBlockCost <= time.Since(startTime), "Processing time should be reasonable")
 
 	// Test stats string output
 	statsStr := stats.toString()
 	require.Contains(t, statsStr, "dsUseOptimizedHighestBlock: true")
-	require.Contains(t, statsStr, "dsGetBlockCounter: 1")
+	require.Contains(t, statsStr, "dsGetHighestBlockCounter: 1")
 }
 
 // =============================================================================
@@ -525,8 +525,8 @@ func TestGetHighestDSL2BlockWithRealServer(t *testing.T) {
 	require.Equal(t, uint64(104), blockNum, "Should return the latest block number")
 
 	// Verify stats were collected properly
-	require.Equal(t, 1, stats.dsGetBlockCounter, "Should have made one query")
-	require.True(t, stats.dsGetBlockCost > 0, "Should record query time")
+	require.Equal(t, 1, stats.dsGetHighestBlockCounter, "Should have made one query")
+	require.True(t, stats.dsGetHighestBlockCost > 0, "Should record query time")
 	require.True(t, stats.dsStart > 0, "Should record connection time")
 
 	// The critical test: verify which API was actually used
@@ -534,7 +534,7 @@ func TestGetHighestDSL2BlockWithRealServer(t *testing.T) {
 	t.Logf("  Block returned: %d", blockNum)
 	t.Logf("  Optimized API used: %t", stats.dsUseOptimizedHighestBlock)
 	t.Logf("  Connection time: %v", stats.dsStart)
-	t.Logf("  Query time: %v", stats.dsGetBlockCost)
+	t.Logf("  Query time: %v", stats.dsGetHighestBlockCost)
 	t.Logf("  Full stats: %s", stats.toString())
 
 	if stats.dsUseOptimizedHighestBlock {
@@ -627,9 +627,9 @@ func TestRealServerFailureRecovery(t *testing.T) {
 		require.NotNil(t, globalQueryManager, "Connection manager should exist")
 
 		t.Logf("🎯 FAILURE RECOVERY RESULTS:")
-		t.Logf("  Phase 1 (normal): Block %d, Time %v", blockNum1, stats1.dsGetBlockCost)
+		t.Logf("  Phase 1 (normal): Block %d, Time %v", blockNum1, stats1.dsGetHighestBlockCost)
 		t.Logf("  Phase 2 (failure): Error as expected")
-		t.Logf("  Phase 3 (recovery): Block %d, Time %v", blockNum3, stats3.dsGetBlockCost)
+		t.Logf("  Phase 3 (recovery): Block %d, Time %v", blockNum3, stats3.dsGetHighestBlockCost)
 		t.Logf("  Recovery successful: %t", blockNum3 > blockNum1)
 	})
 
@@ -703,9 +703,9 @@ func TestRealServerFailureRecovery(t *testing.T) {
 		require.NotNil(t, globalQueryManager, "Connection manager should exist")
 
 		t.Logf("🎯 CONNECTION FAILURE RECOVERY RESULTS:")
-		t.Logf("  Before failure: Block %d, Time %v", blockNum1, stats1.dsGetBlockCost)
+		t.Logf("  Before failure: Block %d, Time %v", blockNum1, stats1.dsGetHighestBlockCost)
 		t.Logf("  During failure: Error as expected (%v)", err2)
-		t.Logf("  After recovery: Block %d, Time %v", blockNum3, stats3.dsGetBlockCost)
+		t.Logf("  After recovery: Block %d, Time %v", blockNum3, stats3.dsGetHighestBlockCost)
 		t.Logf("  Recovery successful: %t", blockNum3 > blockNum1)
 	})
 }
@@ -1068,12 +1068,12 @@ func TestBatchOptimizationIntegration(t *testing.T) {
 
 		require.NoError(t, err, "getHighestDSL2Block should succeed with batch optimization")
 		require.Equal(t, uint64(1004), blockNum, "Should return latest block")
-		require.Equal(t, 1, stats.dsGetBlockCounter, "Should have made one query")
+		require.Equal(t, 1, stats.dsGetHighestBlockCounter, "Should have made one query")
 
 		t.Logf("🚀 BATCH OPTIMIZATION INTEGRATION RESULTS:")
 		t.Logf("  Block returned: %d", blockNum)
 		t.Logf("  Optimized API used: %t", stats.dsUseOptimizedHighestBlock)
-		t.Logf("  Query time: %v", stats.dsGetBlockCost)
+		t.Logf("  Query time: %v", stats.dsGetHighestBlockCost)
 		t.Logf("  Connection time: %v", stats.dsStart)
 
 		// Compare with standard mode
@@ -1085,8 +1085,8 @@ func TestBatchOptimizationIntegration(t *testing.T) {
 		require.Equal(t, uint64(1004), blockNum2, "Should return same block")
 
 		t.Logf("📊 PERFORMANCE COMPARISON:")
-		t.Logf("  Batch optimization time: %v", stats.dsGetBlockCost)
-		t.Logf("  Standard mode time: %v", standardStats.dsGetBlockCost)
+		t.Logf("  Batch optimization time: %v", stats.dsGetHighestBlockCost)
+		t.Logf("  Standard mode time: %v", standardStats.dsGetHighestBlockCost)
 
 		if stats.dsUseOptimizedHighestBlock {
 			t.Logf("✅ Batch optimization is working and being used")
@@ -1149,8 +1149,8 @@ func TestBatchOptimizationIntegration(t *testing.T) {
 		require.Equal(t, uint64(2000), blockNumStandard, "Standard should return correct block")
 
 		t.Logf("🔧 CONFIGURATION IMPACT TEST:")
-		t.Logf("  Optimized config - API used: %t, Time: %v", statsOptimized.dsUseOptimizedHighestBlock, statsOptimized.dsGetBlockCost)
-		t.Logf("  Standard config - API used: %t, Time: %v", statsStandard.dsUseOptimizedHighestBlock, statsStandard.dsGetBlockCost)
+		t.Logf("  Optimized config - API used: %t, Time: %v", statsOptimized.dsUseOptimizedHighestBlock, statsOptimized.dsGetHighestBlockCost)
+		t.Logf("  Standard config - API used: %t, Time: %v", statsStandard.dsUseOptimizedHighestBlock, statsStandard.dsGetHighestBlockCost)
 
 		// Verify configuration actually affects behavior
 		// Note: The actual API used depends on server support, but configuration should be respected
