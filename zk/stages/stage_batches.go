@@ -242,12 +242,12 @@ func SpawnStageBatches(
 	}
 	getHighestDSL2BlockCost := time.Since(getHighestDSL2Blockstart)
 
-	log.Debug(fmt.Sprintf("[%s] Highest block in db and datastream", logPrefix), "datastreamBlock", highestDSL2Block, "dbBlock", stageProgressBlockNo)
+	log.Info(fmt.Sprintf("[%s] Highest block in db and datastream", logPrefix), "datastreamBlock", highestDSL2Block, "dbBlock", stageProgressBlockNo)
 	unwindFn := func(unwindBlock uint64) (uint64, error) {
 		return rollback(ctx, cfg, logPrefix, eriDb, hermezDb, unwindBlock, uint16(latestForkId), tx, u)
 	}
 	if highestDSL2Block < stageProgressBlockNo {
-		log.Info(fmt.Sprintf("[%s] Datastream behind, unwinding", logPrefix))
+		log.Info(fmt.Sprintf("[%s] Datastream behind, unwinding, highestDSL2Block", logPrefix), "highestDSL2Block", highestDSL2Block)
 		if _, err := unwindFn(highestDSL2Block); err != nil {
 			return err
 		}
@@ -707,11 +707,18 @@ func rollback(
 			log.Error(fmt.Sprintf("[%s] Failed to stop datastream client whilst rolling back", logPrefix), "error", err)
 		}
 	}()
-	ancestorBlockNum, ancestorBlockHash, err := findCommonAncestor(cfg, eriDb, hermezDb, l2BlockReaderRpc{}, latestDSBlockNum)
+	log.Info(fmt.Sprintf("[%s] Searching for common ancestor using reverse algorithm", logPrefix),
+		"latestDSBlock", latestDSBlockNum)
+
+	ancestorBlockNum, ancestorBlockHash, err := findCommonAncestorByReverse(cfg, eriDb, hermezDb, l2BlockReaderRpc{}, latestDSBlockNum)
 	if err != nil {
-		return 0, fmt.Errorf("findCommonAncestor: %w", err)
+		log.Error(fmt.Sprintf("[%s] Failed to find common ancestor with reverse search", logPrefix),
+			"latestDSBlock", latestDSBlockNum,
+			"error", err.Error(),
+			"possibleCause", "RPC blocks may be completely pruned or DB corruption")
+		return 0, fmt.Errorf("findCommonAncestorByReverse: %w", err)
 	}
-	log.Debug(fmt.Sprintf("[%s] The common ancestor for datastream and db is block %d (%s)", logPrefix, ancestorBlockNum, ancestorBlockHash))
+	log.Info(fmt.Sprintf("[%s] The common ancestor for datastream and db is block %d (%s)", logPrefix, ancestorBlockNum, ancestorBlockHash))
 
 	unwindBlockNum, unwindBlockHash, batchNum, err := getUnwindPoint(eriDb, hermezDb, ancestorBlockNum, ancestorBlockHash)
 	if err != nil {
@@ -795,6 +802,114 @@ func findCommonAncestor(
 	}
 
 	return *blockNumber, blockHash, nil
+}
+
+// findCommonAncestorByReverse searches the latest common ancestor using exponential search.
+// It uses exponential steps to quickly find the range, then binary search within that range.
+func findCommonAncestorByReverse(
+	cfg BatchesCfg,
+	db erigon_db.ReadOnlyErigonDb,
+	hermezDb state.ReadOnlyHermezDb,
+	blockReaderRpc L2BlockReaderRpc,
+	latestBlockNum uint64,
+) (uint64, common.Hash, error) {
+	if latestBlockNum == 0 {
+		log.Warn("Cannot search common ancestor with latestBlockNum=0")
+		return 0, emptyHash, ErrFailedToFindCommonAncestor
+	}
+
+	log.Info("Starting exponential search for common ancestor", "latestBlockNum", latestBlockNum)
+	var lastTestedBlock uint64
+	maxStep := latestBlockNum
+
+	for step := uint64(1); step <= maxStep; step *= 2 {
+		if latestBlockNum <= step {
+			if lastTestedBlock > 1 {
+				log.Info("Searching remaining range", "range", fmt.Sprintf("[1, %d]", lastTestedBlock-1))
+				return binarySearchInRange(cfg, db, hermezDb, blockReaderRpc, 1, lastTestedBlock-1)
+			}
+			break
+		}
+
+		testBlock := latestBlockNum - step
+		lastTestedBlock = testBlock
+
+		matches, _, err := isBlockMatching(cfg, db, hermezDb, blockReaderRpc, testBlock)
+		if err != nil {
+			return 0, emptyHash, fmt.Errorf("isBlockMatching failed for block %d: %w", testBlock, err)
+		}
+		if matches {
+			log.Info("Found matching block", "block", testBlock)
+			return binarySearchInRange(cfg, db, hermezDb, blockReaderRpc, testBlock, latestBlockNum)
+		}
+	}
+
+	lastTestedBlock = latestBlockNum + 1
+
+	log.Info("No matches in exponential search, trying remaining range", "range", fmt.Sprintf("[1, %d]", lastTestedBlock-1))
+	return binarySearchInRange(cfg, db, hermezDb, blockReaderRpc, 1, lastTestedBlock-1)
+}
+
+// binarySearchInRange performs binary search within a given range to find the latest matching block
+func binarySearchInRange(cfg BatchesCfg, db erigon_db.ReadOnlyErigonDb, hermezDb state.ReadOnlyHermezDb,
+	blockReaderRpc L2BlockReaderRpc, startBlock, endBlock uint64) (uint64, common.Hash, error) {
+	var (
+		left        = startBlock
+		right       = endBlock
+		latestMatch *uint64
+		latestHash  common.Hash
+	)
+
+	for left <= right {
+		mid := (left + right) / 2
+		matches, dbHash, err := isBlockMatching(cfg, db, hermezDb, blockReaderRpc, mid)
+		if err != nil {
+			return 0, emptyHash, fmt.Errorf("isBlockMatching failed for block %d: %w", mid, err)
+		}
+		if matches {
+			latestMatch = &mid
+			latestHash = dbHash
+			left = mid + 1
+		} else {
+			right = mid - 1
+		}
+	}
+	if latestMatch == nil {
+		log.Info("Binary search found no common ancestor", "range", fmt.Sprintf("[%d, %d]", startBlock, endBlock))
+		return 0, emptyHash, ErrFailedToFindCommonAncestor
+	}
+
+	log.Info("Binary search found common ancestor", "block", *latestMatch)
+	return *latestMatch, latestHash, nil
+}
+
+// isBlockMatching checks if a block matches between datastream and local database
+// Returns: (matches, dbHash, error)
+func isBlockMatching(cfg BatchesCfg, db erigon_db.ReadOnlyErigonDb, hermezDb state.ReadOnlyHermezDb,
+	blockReaderRpc L2BlockReaderRpc, blockNum uint64) (bool, common.Hash, error) {
+
+	headerHash, err := blockReaderRpc.GetZKBlockByNumberHash(cfg.zkCfg.L2RpcUrl, blockNum)
+	if err != nil {
+		return false, common.Hash{}, nil
+	}
+
+	blockBatch, err := blockReaderRpc.GetBatchNumberByBlockNumber(cfg.zkCfg.L2RpcUrl, blockNum)
+	if err != nil {
+		return false, common.Hash{}, nil
+	}
+
+	dbHash, err := db.ReadCanonicalHash(blockNum)
+	if err != nil {
+		return false, common.Hash{}, err
+	}
+
+	dbBatch, err := hermezDb.GetBatchNoByL2Block(blockNum)
+	if err != nil {
+		return false, common.Hash{}, err
+	}
+
+	matches := headerHash != (common.Hash{}) && headerHash == dbHash && blockBatch == dbBatch
+	return matches, dbHash, nil
 }
 
 // getUnwindPoint resolves the unwind block as the latest block in the previous batch, relative to the provided block.

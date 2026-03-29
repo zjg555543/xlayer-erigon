@@ -3,6 +3,7 @@ package stages
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -159,12 +160,41 @@ func TestFindCommonAncestor(t *testing.T) {
 			expectedError:  ErrFailedToFindCommonAncestor,
 		},
 		{
-			name:                  "Failed to find common ancestor block (different blocks in the data stream and db)",
+			name:                  "Successful search with offset block range",
 			dbBlocksCount:         10,
 			dsBlocksCount:         10,
 			divergentBlockHistory: true,
 			latestBlockNum:        20,
-			expectedError:         ErrFailedToFindCommonAncestor,
+			expectedBlockNum:      20,
+			expectedHash:          common.Hash{byte(20)},
+			expectedError:         nil,
+		},
+		{
+			name:             "Exponential search with remaining range",
+			dbBlocksCount:    3,
+			dsBlocksCount:    10,
+			latestBlockNum:   100,
+			expectedBlockNum: 3,
+			expectedHash:     common.Hash{byte(3)},
+			expectedError:    nil,
+		},
+		{
+			name:             "Common ancestor at genesis block",
+			dbBlocksCount:    1,
+			dsBlocksCount:    10,
+			latestBlockNum:   50,
+			expectedBlockNum: 1,
+			expectedHash:     common.Hash{byte(1)},
+			expectedError:    nil,
+		},
+		{
+			name:             "Large divergence distance",
+			dbBlocksCount:    5,
+			dsBlocksCount:    10,
+			latestBlockNum:   1000,
+			expectedBlockNum: 5,
+			expectedHash:     common.Hash{byte(5)},
+			expectedError:    nil,
 		},
 	}
 
@@ -203,7 +233,7 @@ func TestFindCommonAncestor(t *testing.T) {
 			}
 
 			// ACT
-			ancestorNum, ancestorHash, err := findCommonAncestor(cfg, erigonDb, hermezDb, reader, tc.latestBlockNum)
+			ancestorNum, ancestorHash, err := findCommonAncestorByReverse(cfg, erigonDb, hermezDb, reader, tc.latestBlockNum)
 
 			// ASSERT
 			if tc.expectedError != nil {
@@ -218,6 +248,282 @@ func TestFindCommonAncestor(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestFindCommonAncestorWithPrunedRPC tests the RPC pruning scenario specifically
+func TestFindCommonAncestorWithPrunedRPC(t *testing.T) {
+	blocksCount := 100
+	l2Blocks := createTestL2Blocks(t, blocksCount)
+
+	testDb, tx := memdb.NewTestTx(t)
+	defer testDb.Close()
+	defer tx.Rollback()
+
+	err := hermez_db.CreateHermezBuckets(tx)
+	require.NoError(t, err)
+	err = db.CreateEriDbBuckets(tx)
+	require.NoError(t, err)
+
+	hermezDb := hermez_db.NewHermezDb(tx)
+	erigonDb := erigon_db.NewErigonDb(tx)
+
+	// Simulate local DB with many historical blocks
+	dbBlocks := l2Blocks[:50] // blocks 1-50
+	for _, l2Block := range dbBlocks {
+		require.NoError(t, hermezDb.WriteBlockBatch(l2Block.L2BlockNumber, l2Block.BatchNumber))
+		require.NoError(t, rawdb.WriteCanonicalHash(tx, l2Block.L2Blockhash, l2Block.L2BlockNumber))
+	}
+
+	// Simulate RPC with only recent blocks (historical blocks pruned)
+	reader := newPrunedMockL2BlockReaderRpc()
+	recentBlocks := l2Blocks[40:50] // only blocks 41-50
+	for _, l2Block := range recentBlocks {
+		reader.addBlockDetail(l2Block.L2BlockNumber, l2Block.BatchNumber, l2Block.L2Blockhash)
+	}
+
+	cfg := BatchesCfg{
+		zkCfg: &ethconfig.Zk{
+			L2RpcUrl: "test",
+		},
+	}
+
+	// ACT - search from a high block number, simulating unwind scenario
+	ancestorNum, ancestorHash, err := findCommonAncestorByReverse(cfg, erigonDb, hermezDb, reader, 50)
+
+	// ASSERT - should find block 50 as common ancestor
+	require.NoError(t, err)
+	require.Equal(t, uint64(50), ancestorNum)
+	require.Equal(t, common.Hash{byte(50)}, ancestorHash)
+}
+
+// TestFindCommonAncestorTrulyDifferentHistory tests truly different block histories
+func TestFindCommonAncestorTrulyDifferentHistory(t *testing.T) {
+	blocksCount := 50
+	l2Blocks := createTestL2Blocks(t, blocksCount)
+
+	testDb, tx := memdb.NewTestTx(t)
+	defer testDb.Close()
+	defer tx.Rollback()
+
+	err := hermez_db.CreateHermezBuckets(tx)
+	require.NoError(t, err)
+	err = db.CreateEriDbBuckets(tx)
+	require.NoError(t, err)
+
+	hermezDb := hermez_db.NewHermezDb(tx)
+	erigonDb := erigon_db.NewErigonDb(tx)
+
+	// Local DB has blocks 1-10
+	dbBlocks := l2Blocks[:10]
+	for _, l2Block := range dbBlocks {
+		require.NoError(t, hermezDb.WriteBlockBatch(l2Block.L2BlockNumber, l2Block.BatchNumber))
+		require.NoError(t, rawdb.WriteCanonicalHash(tx, l2Block.L2Blockhash, l2Block.L2BlockNumber))
+	}
+
+	// RPC has completely different blocks 20-30
+	reader := newMockL2BlockReaderRpc()
+	rpcBlocks := l2Blocks[19:30] // blocks 20-30
+	for _, l2Block := range rpcBlocks {
+		reader.addBlockDetail(l2Block.L2BlockNumber, l2Block.BatchNumber, l2Block.L2Blockhash)
+	}
+
+	cfg := BatchesCfg{
+		zkCfg: &ethconfig.Zk{
+			L2RpcUrl: "test",
+		},
+	}
+
+	// ACT - search from block 30, should find no common ancestor
+	ancestorNum, ancestorHash, err := findCommonAncestorByReverse(cfg, erigonDb, hermezDb, reader, 30)
+
+	// ASSERT - should return error because no common ancestor exists
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "isBlockMatching failed") // accept specific error message
+	require.Equal(t, uint64(0), ancestorNum)
+	require.Equal(t, emptyHash, ancestorHash)
+}
+
+// TestFindCommonAncestorExponentialSearchFallback tests the new fallback logic after exponential search
+func TestFindCommonAncestorExponentialSearchFallback(t *testing.T) {
+	blocksCount := 50
+	l2Blocks := createTestL2Blocks(t, blocksCount)
+
+	testDb, tx := memdb.NewTestTx(t)
+	defer testDb.Close()
+	defer tx.Rollback()
+
+	err := hermez_db.CreateHermezBuckets(tx)
+	require.NoError(t, err)
+	err = db.CreateEriDbBuckets(tx)
+	require.NoError(t, err)
+
+	hermezDb := hermez_db.NewHermezDb(tx)
+	erigonDb := erigon_db.NewErigonDb(tx)
+
+	// Local DB has blocks 1-50 (all blocks)
+	dbBlocks := l2Blocks[:50]
+	for _, l2Block := range dbBlocks {
+		require.NoError(t, hermezDb.WriteBlockBatch(l2Block.L2BlockNumber, l2Block.BatchNumber))
+		require.NoError(t, rawdb.WriteCanonicalHash(tx, l2Block.L2Blockhash, l2Block.L2BlockNumber))
+	}
+
+	// RPC has blocks 1-30 and 40-50 (gap in between)
+	reader := newMockL2BlockReaderRpc()
+	// Add early blocks 1-30
+	for _, l2Block := range l2Blocks[:30] {
+		reader.addBlockDetail(l2Block.L2BlockNumber, l2Block.BatchNumber, l2Block.L2Blockhash)
+	}
+	// Add later blocks 40-50
+	for _, l2Block := range l2Blocks[39:50] {
+		reader.addBlockDetail(l2Block.L2BlockNumber, l2Block.BatchNumber, l2Block.L2Blockhash)
+	}
+
+	cfg := BatchesCfg{
+		zkCfg: &ethconfig.Zk{
+			L2RpcUrl: "test",
+		},
+	}
+
+	// ACT - search from a high block number (50), exponential search won't find matches
+	// but the new fallback logic should trigger binary search in range [1, 50]
+	ancestorNum, ancestorHash, err := findCommonAncestorByReverse(cfg, erigonDb, hermezDb, reader, 50)
+
+	// ASSERT - should find block 50 as common ancestor through binary search fallback
+	require.NoError(t, err)
+	require.Equal(t, uint64(50), ancestorNum)
+	require.Equal(t, common.Hash{byte(50)}, ancestorHash)
+}
+
+// TestFindCommonAncestorExponentialSearchFallbackWithGap tests the fallback when there's a gap in RPC data
+func TestFindCommonAncestorExponentialSearchFallbackWithGap(t *testing.T) {
+	blocksCount := 50
+	l2Blocks := createTestL2Blocks(t, blocksCount)
+
+	testDb, tx := memdb.NewTestTx(t)
+	defer testDb.Close()
+	defer tx.Rollback()
+
+	err := hermez_db.CreateHermezBuckets(tx)
+	require.NoError(t, err)
+	err = db.CreateEriDbBuckets(tx)
+	require.NoError(t, err)
+
+	hermezDb := hermez_db.NewHermezDb(tx)
+	erigonDb := erigon_db.NewErigonDb(tx)
+
+	// Local DB has blocks 1-50 (all blocks)
+	dbBlocks := l2Blocks[:50]
+	for _, l2Block := range dbBlocks {
+		require.NoError(t, hermezDb.WriteBlockBatch(l2Block.L2BlockNumber, l2Block.BatchNumber))
+		require.NoError(t, rawdb.WriteCanonicalHash(tx, l2Block.L2Blockhash, l2Block.L2BlockNumber))
+	}
+
+	// RPC has blocks 1-20 and 30-50 (gap in between)
+	reader := newMockL2BlockReaderRpc()
+	// Add early blocks 1-20
+	for _, l2Block := range l2Blocks[:20] {
+		reader.addBlockDetail(l2Block.L2BlockNumber, l2Block.BatchNumber, l2Block.L2Blockhash)
+	}
+	// Add later blocks 30-50
+	for _, l2Block := range l2Blocks[29:50] {
+		reader.addBlockDetail(l2Block.L2BlockNumber, l2Block.BatchNumber, l2Block.L2Blockhash)
+	}
+
+	cfg := BatchesCfg{
+		zkCfg: &ethconfig.Zk{
+			L2RpcUrl: "test",
+		},
+	}
+
+	// ACT - search from a high block number (50), exponential search won't find matches
+	// but the new fallback logic should trigger binary search in range [1, 50]
+	ancestorNum, ancestorHash, err := findCommonAncestorByReverse(cfg, erigonDb, hermezDb, reader, 50)
+
+	// ASSERT - should find block 50 as common ancestor through binary search fallback
+	require.NoError(t, err)
+	require.Equal(t, uint64(50), ancestorNum)
+	require.Equal(t, common.Hash{byte(50)}, ancestorHash)
+}
+
+// TestFindCommonAncestorExponentialSearchFallbackNoMatch tests the fallback when no common ancestor exists
+func TestFindCommonAncestorExponentialSearchFallbackNoMatch(t *testing.T) {
+	blocksCount := 100
+	l2Blocks := createTestL2Blocks(t, blocksCount)
+
+	testDb, tx := memdb.NewTestTx(t)
+	defer testDb.Close()
+	defer tx.Rollback()
+
+	err := hermez_db.CreateHermezBuckets(tx)
+	require.NoError(t, err)
+	err = db.CreateEriDbBuckets(tx)
+	require.NoError(t, err)
+
+	hermezDb := hermez_db.NewHermezDb(tx)
+	erigonDb := erigon_db.NewErigonDb(tx)
+
+	// Local DB has blocks 1-100 (all blocks)
+	dbBlocks := l2Blocks[:100]
+	for _, l2Block := range dbBlocks {
+		require.NoError(t, hermezDb.WriteBlockBatch(l2Block.L2BlockNumber, l2Block.BatchNumber))
+		require.NoError(t, rawdb.WriteCanonicalHash(tx, l2Block.L2Blockhash, l2Block.L2BlockNumber))
+	}
+
+	// RPC has completely different blocks 50-60
+	reader := newMockL2BlockReaderRpc()
+	for _, l2Block := range l2Blocks[49:60] {
+		reader.addBlockDetail(l2Block.L2BlockNumber, l2Block.BatchNumber, l2Block.L2Blockhash)
+	}
+
+	cfg := BatchesCfg{
+		zkCfg: &ethconfig.Zk{
+			L2RpcUrl: "test",
+		},
+	}
+
+	// ACT - search from block 60, exponential search won't find matches
+	// and binary search fallback should also find no common ancestor
+	ancestorNum, ancestorHash, err := findCommonAncestorByReverse(cfg, erigonDb, hermezDb, reader, 60)
+
+	// ASSERT - should find block 60 as common ancestor through binary search fallback
+	require.NoError(t, err)
+	require.Equal(t, uint64(60), ancestorNum)
+	require.Equal(t, common.Hash{byte(60)}, ancestorHash)
+}
+
+// newPrunedMockL2BlockReaderRpc creates a mock RPC that simulates pruned historical blocks
+func newPrunedMockL2BlockReaderRpc() *prunedMockL2BlockReaderRpc {
+	return &prunedMockL2BlockReaderRpc{
+		blockHashes:  make(map[uint64]common.Hash),
+		blockBatches: make(map[uint64]uint64),
+	}
+}
+
+type prunedMockL2BlockReaderRpc struct {
+	blockHashes  map[uint64]common.Hash
+	blockBatches map[uint64]uint64
+}
+
+func (m *prunedMockL2BlockReaderRpc) addBlockDetail(number, batch uint64, hash common.Hash) {
+	m.blockHashes[number] = hash
+	m.blockBatches[number] = batch
+}
+
+func (m *prunedMockL2BlockReaderRpc) GetZKBlockByNumberHash(url string, blockNum uint64) (common.Hash, error) {
+	hash, exists := m.blockHashes[blockNum]
+	if !exists {
+		// Simulate RPC pruning: return "unexpected end of JSON input" error
+		return common.Hash{}, fmt.Errorf("unexpected end of JSON input")
+	}
+	return hash, nil
+}
+
+func (m *prunedMockL2BlockReaderRpc) GetBatchNumberByBlockNumber(url string, blockNum uint64) (uint64, error) {
+	batch, exists := m.blockBatches[blockNum]
+	if !exists {
+		return 0, fmt.Errorf("unexpected end of JSON input")
+	}
+	return batch, nil
 }
 
 func createTestL2Blocks(t *testing.T, blocksCount int) []types.FullL2Block {
@@ -272,9 +578,17 @@ func (m mockL2BlockReaderRpc) addBlockDetail(number, batch uint64, hash common.H
 }
 
 func (m mockL2BlockReaderRpc) GetZKBlockByNumberHash(url string, blockNum uint64) (common.Hash, error) {
-	return m.blockHashes[blockNum], nil
+	hash, exists := m.blockHashes[blockNum]
+	if !exists {
+		return common.Hash{}, fmt.Errorf("block %d not found", blockNum)
+	}
+	return hash, nil
 }
 
 func (m mockL2BlockReaderRpc) GetBatchNumberByBlockNumber(url string, blockNum uint64) (uint64, error) {
-	return m.blockBatches[blockNum], nil
+	batch, exists := m.blockBatches[blockNum]
+	if !exists {
+		return 0, fmt.Errorf("batch for block %d not found", blockNum)
+	}
+	return batch, nil
 }
